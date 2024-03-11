@@ -6,11 +6,11 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 
 This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466)
 
-Inputs and Outputs:
+<b>Inputs and Outputs</b>:
 - <b>Input</b>: table(s), columns, and date range
 - <b>Output</b>: JSON (list, line delimited), CSV, or PARQUET files
 
-Azure Functions:
+<b>Azure Functions</b>:
 1. <b>log_analytics_generate_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
 2. <b>log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
 3. <b>log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
