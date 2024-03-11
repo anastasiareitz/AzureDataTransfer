@@ -87,7 +87,7 @@ Execute HTTP trigger log_analytics_query_send_to_queue() with query and connecti
     "end_datetime" : "2024-03-06 00:01:00"
 }
 ```
-Your query will be split into chunks and saved as messages in your storage queue. The Queue triggered log_analytics_process_queue() will then automatically processes the messages and results in JSON/CSV/PARQUET format will be saved to your storage account container. 
+Your query will be split into chunks and saved as messages in your storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages and send results in JSON/CSV/PARQUET format to your storage account container. 
 
 ## Changelog
 
