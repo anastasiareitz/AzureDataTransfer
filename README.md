@@ -15,6 +15,8 @@ Azure Functions:
 2. <b>log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
 3. <b>log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/648c59ff-50aa-4314-acc5-cb7a0539085a)
+
 ## Files
 
 - <b>azure-log-analytics-data-export-X.X.X.ipynb</b>: python notebook used for development and testing
