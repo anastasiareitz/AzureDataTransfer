@@ -26,14 +26,14 @@ Azure Functions:
 
 ## Setup Notes
 
-Azure Resources Required:
+<b>Azure Resources Required</b>:
 1. Log Analytics Workspace (your data source)
 2. Storage Account
 - Queue (temp storage for split query messages/jobs)
 - Container (your data destination)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 
-Authentication Method (managed identity or service principal) Role Requirements:
+<b>Authentication Method (managed identity or service principal) Role Requirements</b>:
 - Setup via Azure Portal -> Function App -> Identity -> System Assigned -> On -> Azure Role Assignments
 1. <b>Monitoring Metrics Publisher</b>: Ingest to Log Analytics (optional)
 2. <b>Log Analytics Contributor</b>: Query Log Analytics
@@ -41,18 +41,18 @@ Authentication Method (managed identity or service principal) Role Requirements:
 4. <b>Storage Queue Data Message Processor</b>: Storage Queue Trigger for Azure Function
 5. <b>Storage Blob Data Contributor</b>: Upload to Blob Storage
 
-Required Environment Variables:
+<b>Required Environment Variables</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>QueueName</b> -> <QUEUE_NAME>
 2. <b>StorageBlobURL</b> -> https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/
 3. <b>StorageBlobContainer</b> -> <STORAGE_ACCOUNT_CONTAINER_NAME>
 4. <b>StorageOutputFormat</b> -> <OUTPUT_FORMAT> (JSONL, CSV, or PARQUET)
 
-Required Environment Variables for Queue Trigger via Managed Identity Authentication: 
+<b>Required Environment Variables for Queue Trigger via Managed Identity Authentication</b>: 
 1. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 2. <b>storageAccountConnectionString__credential</b> -> managedidentity
 
-Data Collection Endpoint and Rule Setup for Log Analytics Ingest:
+<b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
 1. Azure Portal -> Monitor -> Create Data Collection Endpoint
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
 3. Create Data Collection Rule and Add Publisher Role 
