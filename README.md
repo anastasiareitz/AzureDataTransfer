@@ -7,7 +7,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466)
 
 <b>Inputs and Outputs</b>:
-- <b>Input</b>: table(s), columns, and date range
+- <b>Input</b>: log analytics workspace table(s), columns, and date range
 - <b>Output</b>: JSON (list, line delimited), CSV, or PARQUET files
 
 <b>Azure Functions</b>:
@@ -27,10 +27,10 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 ## Setup Notes
 
 <b>Azure Resources Required</b>:
-1. Log Analytics Workspace (your data source)
+1. Log Analytics Workspace (source)
 2. Storage Account
 - Queue (temp storage for split query messages/jobs)
-- Container (your data destination)
+- Container (destination)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 
 <b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
