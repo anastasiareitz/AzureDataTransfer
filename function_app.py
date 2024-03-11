@@ -142,9 +142,9 @@ def generate_and_ingest_test_data(
     number_of_rows: int,
     number_of_columns: int = 10,
     max_rows_per_request=5_000_000,
-) -> pd.DataFrame:
+) -> dict:
     """
-    Generates fake data and ingests in Log Analytics for testing
+    Generates test/fake data and ingests in Log Analytics
         note: credential requires Log Analytics Contributor and Monitor Publisher roles
         note: 10M rows with 10 columns takes about 15-20 minutes
     Log Analytics Data Collection Endpoint and Rule setup:
@@ -174,7 +174,7 @@ def generate_and_ingest_test_data(
             note: lower this if running out memory
             note: 5M rows with 10 columns requires about 4-8 GB of RAM
     Returns:
-        dict with results stats
+        dict with results summary
     """
     time_start = time.time()
     # input validation
@@ -558,12 +558,12 @@ def query_log_analytics_send_to_queue(
     start_datetime: str,
     end_datetime: str,
     query_row_limit: int = 250_000,
-    query_row_limit_correction: int = 100,
+    query_row_limit_correction: int = 1_000,
     add_row_counts: bool = True,
     break_up_query_freq="4h",
 ) -> dict:
     """
-    Generates
+    Splits query date range into smaller queries and sends to storage queue
         note: credential requires Log Analytics Contributor and Storage Queue Data Contributor roles
         note: date range is processed as [start_datetime, end_datetime)
     Args:
@@ -589,7 +589,7 @@ def query_log_analytics_send_to_queue(
         break_up_query_freq: limit on query datetime range to prevent crashes
             note:for  more than 10M rows / hour, use 4 hours or less
     Return
-        dict of results stats
+        dict of results summary
     """
     start_time = time.time()
     # input validation
@@ -697,7 +697,9 @@ def get_message_from_queue(
         time.sleep(request_wait_seconds)
 
 
-def delete_message_from_queue(queue_client: QueueClient, queue_message: QueueMessage):
+def delete_message_from_queue(
+    queue_client: QueueClient, queue_message: QueueMessage
+) -> None:
     try:
         queue_client.delete_message(queue_message)
         logging.info(f"Successfully Deleted Message from Queue")
@@ -717,7 +719,7 @@ def check_if_queue_empty_peek_message(queue_client: QueueClient) -> bool:
         return False
 
 
-def message_validation_check(message: dict, confirm_row_count: bool):
+def message_validation_check(message: dict, confirm_row_count: bool) -> None:
     required_fields = [
         "Table",
         "Columns",
@@ -823,9 +825,9 @@ def process_queue_message(
     message: dict,
     output_format: str,
     confirm_row_count: bool,
-):
+) -> None:
     """
-    Processes 1 message: validates, queries log analytics, and saves results to storage account
+    Processes individual message: validates, queries log analytics, and saves results to storage account
     Args:
         log_client: azure log analytics LogsQueryClient object
         container_client: azure storage account ContainerClient object
@@ -884,7 +886,7 @@ def process_queue_messages_loop(
         confirm_row_count: enables check if row count in message matches downloaded data
         message_visibility_timeout_seconds: number of seconds for queue message visibility
     Returns:
-        dict of results stats
+        dict of results summary
     """
     # input validation
     logging.info(
@@ -977,7 +979,7 @@ def upload_file_to_storage(
     filename: str,
     data: bytes | str,
     azure_storage_connection_timeout_fix_seconds: int = 600,
-):
+) -> None:
     # note: need to use undocumented param connection_timeout to avoid timeout errors
     # ref: https://stackoverflow.com/questions/65092741/solve-timeout-errors-on-file-uploads-with-new-azure-storage-blob-package
     try:
