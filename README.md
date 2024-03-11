@@ -19,10 +19,10 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ## Files
 
-- <b>azure-log-analytics-data-export-X.X.X.ipynb</b>: python notebook used for development and testing
-- <b>function_app.py</b>: Azure Function App python code
+- <b>azure-log-analytics-data-export.ipynb</b>: python notebook for development, testing, or interactive use
+- <b>function_app.py</b>: Azure Function App python source code
 - <b>host.json</b>: Azure Function App settings
-- <b>requirements.txt</b>: python package requirements
+- <b>requirements.txt</b>: python package requirements file
 
 ## Setup Notes
 
@@ -33,7 +33,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - Container (your data destination)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 
-<b>Authentication Method (managed identity or service principal) Role Requirements</b>:
+<b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
 - Setup via Azure Portal -> Function App -> Identity -> System Assigned -> On -> Azure Role Assignments
 1. <b>Monitoring Metrics Publisher</b>: Ingest to Log Analytics (optional)
 2. <b>Log Analytics Contributor</b>: Query Log Analytics
@@ -48,7 +48,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. <b>StorageBlobContainer</b> -> <STORAGE_ACCOUNT_CONTAINER_NAME>
 4. <b>StorageOutputFormat</b> -> <OUTPUT_FORMAT> (JSONL, CSV, or PARQUET)
 
-<b>Required Environment Variables for Queue Trigger via Managed Identity Authentication</b>: 
+<b>Required Environment Variables for Queue Trigger via Managed Identity</b>: 
 1. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 2. <b>storageAccountConnectionString__credential</b> -> managedidentity
 
@@ -67,7 +67,7 @@ reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-l
     "log_analytics_data_collection_endpoint" : "https://XXXXXXXXX-XXXXX.eastus-1.ingest.monitor.azure.com",
     "log_analytics_data_collection_rule_id" : "dcr-XXXXXXXXXXXXXXXXXXXXXX",
     "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXX_CL",
-    "start_datetime" : "02-28-2024 00:00:00.000000",
+    "start_datetime" : "03-06-2024 00:00:00.000000",
     "timedelta_seconds" : 0.00036,
     "number_of_rows" : 1000000
 }
@@ -84,10 +84,10 @@ Execute HTTP trigger log_analytics_query_send_to_queue() with query and connecti
     "storage_queue_url" : "https://XXXXXXXXXXXXXXX.queue.core.windows.net/XXXXXXXXXXXXX",
     "table_names_and_columns" : { "XXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
     "start_datetime" : "2024-03-06 00:00:00",
-    "end_datetime" : "2024-03-06 00:01:00"
+    "end_datetime" : "2024-03-06 01:00:00"
 }
 ```
-Your query will be split into chunks and saved as messages in your storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages and send results in JSON/CSV/PARQUET format to your storage account container. 
+The query will be split into chunks and then saved as messages in a storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages in parallel and send the results to a storage account container. 
 
 ## Changelog
 
