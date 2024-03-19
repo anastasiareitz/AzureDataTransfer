@@ -8,5 +8,6 @@ azure-monitor-ingestion
 azure-monitor-query
 azure-storage-blob
 azure-storage-queue
+azure-data-tables
 pandas
 pyarrow
