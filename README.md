@@ -11,9 +11,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - <b>Output</b>: JSON (list, line delimited), CSV, or PARQUET files
 
 <b>Azure Functions</b>:
-1. <b>log_analytics_generate_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
-2. <b>log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
-3. <b>log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
+1. <b>azure_log_analytics_generate_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
+2. <b>azure_log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
+3. <b>azure_log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/648c59ff-50aa-4314-acc5-cb7a0539085a)
 
@@ -29,8 +29,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 <b>Azure Resources Required</b>:
 1. Log Analytics Workspace (source)
 2. Storage Account
-- Queue (temp storage for split query messages/jobs)
 - Container (destination)
+- Queue (temp storage for split query messages/jobs)
+- Table (logging)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 
 <b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
@@ -40,17 +41,13 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. <b>Storage Queue Data Contributor</b>: Storage Queue Send/Get/Delete
 4. <b>Storage Queue Data Message Processor</b>: Storage Queue Trigger for Azure Function
 5. <b>Storage Blob Data Contributor</b>: Upload to Blob Storage
-
-<b>Required Environment Variables</b>:
-- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
-1. <b>QueueName</b> -> <QUEUE_NAME>
-2. <b>StorageBlobURL</b> -> https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/
-3. <b>StorageBlobContainer</b> -> <STORAGE_ACCOUNT_CONTAINER_NAME>
-4. <b>StorageOutputFormat</b> -> <OUTPUT_FORMAT> (JSONL, CSV, or PARQUET)
+6. <b>Storage Table Data Contributor</b>: Logging
 
 <b>Required Environment Variables for Queue Trigger via Managed Identity</b>: 
-1. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
-2. <b>storageAccountConnectionString__credential</b> -> managedidentity
+- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
+1. <b>QueueName</b> -> <QUEUE_NAME>
+2. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
+3. <b>storageAccountConnectionString__credential</b> -> managedidentity
 
 <b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
 1. Azure Portal -> Monitor -> Create Data Collection Endpoint
@@ -60,7 +57,7 @@ reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-l
 
 ## Usage
 
-(Optional) Execute HTTP trigger log_analytics_generate_test_data() to generate test/fake data and ingest into Log Analytics. 
+(Optional) Execute HTTP trigger azure_log_analytics_generate_test_data() to generate test/fake data and ingest into Log Analytics. 
 
 ```json
 {
@@ -73,7 +70,7 @@ reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-l
 }
 ```
 
-Execute HTTP trigger log_analytics_query_send_to_queue() with query and connection parameters:
+Execute HTTP trigger azure_log_analytics_query_send_to_queue() with query and connection parameters:
 
 ```json
 {
@@ -92,4 +89,8 @@ The query will be split into chunks and then saved as messages in a storage queu
 ## Changelog
 
 1.0.0:
-- Initial Release 
+- Initial Release
+
+1.1.0:
+- Added logging to Azure Table Storage
+- Added row count checks
