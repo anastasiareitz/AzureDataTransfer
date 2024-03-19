@@ -27,9 +27,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 ## Setup Notes
 
 <b>Azure Resources Required</b>:
-1. Log Analytics Workspace (source)
+1. Log Analytics Workspace (data source)
 2. Storage Account
-- Container (destination)
+- Container (data output destination)
 - Queue (temp storage for split query messages/jobs)
 - Table (logging)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
@@ -55,16 +55,27 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. Create Data Collection Rule and Add Publisher Role 
 reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal
 
+<b>Queue Trigger Setup:</b>:
+- To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
+- Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
+
+<b>Azure Storage Setup</b>:
+1. Create a container for data output
+2. Create a queue for messages/jobs
+3. Create 3 tables for logging (i.e. ingestlog, querylog, and processlog)
+
 ## Usage
 
 (Optional) Execute HTTP trigger azure_log_analytics_generate_test_data() to generate test/fake data and ingest into Log Analytics. 
 
 ```json
 {
-    "log_analytics_data_collection_endpoint" : "https://XXXXXXXXX-XXXXX.eastus-1.ingest.monitor.azure.com",
-    "log_analytics_data_collection_rule_id" : "dcr-XXXXXXXXXXXXXXXXXXXXXX",
-    "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXX_CL",
-    "start_datetime" : "03-06-2024 00:00:00.000000",
+    "log_analytics_data_collection_endpoint" : "https://XXXXXXXXXXXXXX-XXXXXXX.XXXXXX.ingest.monitor.azure.com",
+    "log_analytics_data_collection_rule_id" : "dcr-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXXXXXX_CL",
+    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
+    "storage_table_ingest_name" : "XXXXXXXXXXX",
+    "start_datetime" : "03-19-2024 00:00:00.000000",
     "timedelta_seconds" : 0.00036,
     "number_of_rows" : 1000000
 }
@@ -75,22 +86,28 @@ Execute HTTP trigger azure_log_analytics_query_send_to_queue() with query and co
 ```json
 {
     "subscription_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "resource_group_name" : "XXXXXXXXXXXXXXXXXXX",
-    "log_analytics_worksapce_name" : "XXXXXXXXXXX",
+    "resource_group_name" : "XXXXXXXXXXXXXXXXXXXXXXX",
+    "log_analytics_worksapce_name" : "XXXXXXXXXXXXXXXX",
     "log_analytics_workspace_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "storage_queue_url" : "https://XXXXXXXXXXXXXXX.queue.core.windows.net/XXXXXXXXXXXXX",
-    "table_names_and_columns" : { "XXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
-    "start_datetime" : "2024-03-06 00:00:00",
-    "end_datetime" : "2024-03-06 01:00:00"
+    "storage_queue_url" : "https://XXXXXXXXXXXXXXXXXXX.queue.core.windows.net/",
+    "storage_queue_name" : "XXXXXXXXXXXXXX",
+    "storage_blob_url" : "https://XXXXXXXXXXXXXXXXXXXXX.blob.core.windows.net/",
+    "storage_blob_container_name" : "XXXXXXXXXXXXX",
+    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
+    "storage_table_query_name" : "XXXXXXXXXXXXXX",
+    "storage_table_process_name" : "XXXXXXXXXXXXXX",
+    "table_names_and_columns" : { "XXXXXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
+    "start_datetime" : "2024-03-19 00:00:00",
+    "end_datetime" : "2024-03-20 00:00:00"
 }
 ```
 The query will be split into chunks and then saved as messages in a storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages in parallel and send the results to a storage account container. 
 
 ## Changelog
 
-1.0.0:
-- Initial Release
-
 1.1.0:
 - Added logging to Azure Table Storage
 - Added row count checks
+
+1.0.0:
+- Initial Release
