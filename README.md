@@ -15,7 +15,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 2. <b>azure_log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
 3. <b>azure_log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/648c59ff-50aa-4314-acc5-cb7a0539085a)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/578934a8-5d34-4109-aa54-77b98ce47157)
 
 ## Files
 
