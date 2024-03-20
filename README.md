@@ -14,6 +14,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 1. <b>azure_log_analytics_generate_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
 2. <b>azure_log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
 3. <b>azure_log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
+4. <b>azure_process_poison_queue()</b>: Storage Queue Trigger, processes poison queue message and sends to table storage log
+5. <b>azure_get_query_status()</b>: HTTP Trigger, gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes, runtime)
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/578934a8-5d34-4109-aa54-77b98ce47157)
 
@@ -31,7 +33,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 2. Storage Account
 - Container (data output destination)
 - Queue (temp storage for split query messages/jobs)
-- Table (logging)
+- Table (logging for status checks)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 
 <b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
@@ -67,7 +69,7 @@ reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-l
   
 ## Usage
 
-(Optional) Execute HTTP trigger azure_log_analytics_generate_test_data() to generate test/fake data and ingest into Log Analytics. 
+1. (Optional) Execute HTTP trigger <b>azure_log_analytics_generate_test_data()</b> to generate test/fake data and ingest into Log Analytics. 
 
 ```json
 {
@@ -82,7 +84,7 @@ reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-l
 }
 ```
 
-Execute HTTP trigger azure_log_analytics_query_send_to_queue() with query and connection parameters:
+2. Execute HTTP trigger <b>azure_log_analytics_query_send_to_queue()</b> with query and connection parameters:
 
 ```json
 {
@@ -104,7 +106,21 @@ Execute HTTP trigger azure_log_analytics_query_send_to_queue() with query and co
 ```
 The query will be split into chunks and then saved as messages in a storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages in parallel and send the results to a storage account container. 
 
+3. Execute HTTP trigger <b>azure_get_query_status()</b> with query and connection parameters:
+
+```json
+{
+    "query_uuid" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXX.table.core.windows.net/",
+    "storage_table_query_name" : "XXXXXXXXX",
+    "storage_table_process_name" : "XXXXXXXXXXXXX"
+}
+```
+
 ## Changelog
+
+1.2.0:
+- Added get_status() azure function
 
 1.1.0:
 - Added logging to Azure Table Storage
