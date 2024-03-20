@@ -55,15 +55,16 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. Create Data Collection Rule and Add Publisher Role 
 reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal
 
+<b>Azure Storage Setup</b>:
+1. Create a container for data output files
+2. Create a queue for messages/jobs
+3. Create a queue named <QUEUE_NAME>-poison for failed messages/jobs
+4. Create 3 tables for logging (i.e. ingestlog, querylog, and processlog)
+
 <b>Queue Trigger Setup:</b>:
 - To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
-
-<b>Azure Storage Setup</b>:
-1. Create a container for data output
-2. Create a queue for messages/jobs
-3. Create 3 tables for logging (i.e. ingestlog, querylog, and processlog)
-
+  
 ## Usage
 
 (Optional) Execute HTTP trigger azure_log_analytics_generate_test_data() to generate test/fake data and ingest into Log Analytics. 
