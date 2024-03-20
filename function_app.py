@@ -40,7 +40,7 @@ credential = DefaultAzureCredential()
 # add 2. storageAccountConnectionString__credential -> managedidentity
 # add 3. QueueName -> <QUEUE_NAME>
 env_var_storage_queue_name = os.environ["QueueName"]
-
+storage_queue_poison_name = env_var_storage_queue_name + "-poison"
 
 # -----------------------------------------------------------------------------
 # log analytics ingest
@@ -1217,7 +1217,7 @@ def azure_log_analytics_generate_test_data(req: func.HttpRequest) -> func.HttpRe
         - number_of_rows: int
     """
     logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running log_analytics_generate_test_data function...")
+    logging.info("Running azure_log_analytics_generate_test_data function...")
     # request inputs
     request_body = req.get_json()
     endpoint = request_body.get("log_analytics_data_collection_endpoint")
@@ -1289,7 +1289,7 @@ def azure_log_analytics_query_send_to_queue(
         - end_datetime: str
     """
     logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running log_analytics_query_send_to_queue function...")
+    logging.info("Running azure_log_analytics_query_send_to_queue function...")
     # request inputs
     request_body = req.get_json()
     subscription_id = request_body.get("subscription_id")
@@ -1376,10 +1376,10 @@ def azure_log_analytics_query_send_to_queue(
 )
 def azure_log_analytics_process_queue(msg: func.QueueMessage) -> None:
     """
-    Azure Function to processes messages/jobs in queue and send results to stoarge blob
+    Azure Function to process messages/jobs in queue and send results to stoarge blob
     """
     logging.info(f"Python storage queue event triggered")
-    logging.info("Running log_analytics_process_queue function...")
+    logging.info("Running azure_log_analytics_process_queue function...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1393,4 +1393,60 @@ def azure_log_analytics_process_queue(msg: func.QueueMessage) -> None:
         )
         logging.info(f"Success, Runtime: {round(time.time() - start_time, 1)} seconds")
     except Exception as e:
+        raise Exception(f"Failed: {e}")
+
+
+@app.queue_trigger(
+    arg_name="msg",
+    queue_name=storage_queue_poison_name,
+    connection="storageAccountConnectionString",
+)
+def azure_log_analytics_process_queue_poison(msg: func.QueueMessage) -> None:
+    """
+    Azure Function to process poisoned messages/jobs in queue and send to log table
+    """
+    start_time = time.time()
+    logging.info(f"Python storage queue event triggered")
+    logging.info("Running azure_log_analytics_process_queue_poison function...")
+    try:
+        # validate message
+        message = msg.get_json()
+        message_validation_check(message)
+        logging.info(f"Processing Message: {message}")
+        # storage table connection for logging
+        # note: requires Storage Table Data Contributor role
+        storage_table_url = message["StorageTableURL"]
+        storage_table_name = message["StorageTableName"]
+        table_client = TableClient(
+            storage_table_url, storage_table_name, credential=credential
+        )
+        # extract fields
+        query_uuid = message["QueryUUID"]
+        sub_query_index = message["SubQuery"]
+        table_name = message["Table"]
+        start_datetime = message["StartDatetime"]
+        end_datetime = message["EndDatetime"]
+        row_count = message["Count"]
+        # logging to storage table
+        time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
+        status = "Failed"
+        # generate unique row key
+        row_key = f"{query_uuid}__{status}__{table_name}__"
+        row_key += f"{start_datetime}__{end_datetime}__{row_count}"
+        unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
+        return_message = {
+            "PartitionKey": query_uuid,
+            "RowKey": unique_row_sha256_hash,
+            "SubQuery": sub_query_index,
+            "Status": status,
+            "Table": table_name,
+            "StartDatetime": start_datetime,
+            "EndDatetime": end_datetime,
+            "RowCount": row_count,
+            "TimeGenerated": time_generated,
+        }
+        table_client.upsert_entity(return_message, mode=UpdateMode.REPLACE)
+        logging.info(f"Success, Runtime: {round(time.time() - start_time, 1)} seconds")
+    except Exception as e:
+        logging.info(f"Invalid message: {msg.get_body().decode('utf-8')}")
         raise Exception(f"Failed: {e}")

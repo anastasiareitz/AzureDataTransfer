@@ -5,7 +5,11 @@
         "snapshotPersistenceEnabled": true 
     },
     "extensions": {
-        "queues": {"messageEncoding": "none"}
+        "queues": {
+            "messageEncoding": "none",
+            "maxPollingInterval": "00:01:00",
+            "visibilityTimeout" : "00:10:00"
+        }
     },
     "extensionBundle": {
         "id": "Microsoft.Azure.Functions.ExtensionBundle",
