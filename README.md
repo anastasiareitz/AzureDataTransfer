@@ -126,4 +126,4 @@ The query will be split into chunks and then saved as messages in a storage queu
 - Added row count checks
 
 1.0.0:
-- Initial Release
+- Initial release
