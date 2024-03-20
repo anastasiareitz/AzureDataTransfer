@@ -628,7 +628,7 @@ def query_log_analytics_send_to_queue(
         note: credential requires Log Analytics, Storage Queue, and Table Storage Contributor roles
         note: date range is processed as [start_datetime, end_datetime)
     Args:
-        query_uuid: uuid connected to full query
+        query_uuid: uuid for full query
             format: "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
         credential: azure default credential object
         subscription_id: azure subscription id
@@ -997,7 +997,9 @@ def process_queue_message(
         query_results_df, output_format, output_filename_base
     )
     # upload to blob storage
-    upload_file_to_storage(container_client, full_output_filename, output_data)
+    file_size = upload_file_to_storage(
+        container_client, full_output_filename, output_data
+    )
     status = "Success"
     # logging success to storage table
     query_uuid = message["QueryUUID"]
@@ -1009,7 +1011,7 @@ def process_queue_message(
     # generate unique row key
     row_key = f"{query_uuid}__{status}__{table_name}__"
     row_key += f"{start_datetime}__{end_datetime}__{row_count}__"
-    row_key += f"{full_output_filename}"
+    row_key += f"{full_output_filename}__{file_size}"
     unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
     # response and logging to storage table
     runtime_seconds = round(time.time() - start_time, 1)
@@ -1024,6 +1026,7 @@ def process_queue_message(
         "EndDatetime": end_datetime,
         "RowCount": row_count,
         "Filename": full_output_filename,
+        "FileSizeBytes": file_size,
         "RuntimeSeconds": runtime_seconds,
         "TimeGenerated": time_generated,
     }
@@ -1125,7 +1128,7 @@ def upload_file_to_storage(
     filename: str,
     data: bytes | str,
     azure_storage_connection_timeout_fix_seconds: int = 600,
-) -> None:
+) -> int:
     # note: need to use undocumented param connection_timeout to avoid timeout errors
     # ref: https://stackoverflow.com/questions/65092741/solve-timeout-errors-on-file-uploads-with-new-azure-storage-blob-package
     try:
@@ -1138,8 +1141,13 @@ def upload_file_to_storage(
         storage_account_name = container_client.account_name
         container_name = container_client.container_name
         logging.info(
-            f"Successfully Uploaded to Storage {storage_account_name}:{container_name}/{filename}"
+            f"Successfully Uploaded {storage_account_name}:{container_name}/{filename}"
         )
+        # file size
+        uploaded_file_metadata = list(container_client.list_blobs(filename))[0]
+        uploaded_file_size = uploaded_file_metadata.size
+        logging.info(f"File Size: {uploaded_file_size / 1_000_000} MB")
+        return uploaded_file_size
     except Exception as e:
         logging.info(f"Unable to upload, {filename}, {e}")
         raise Exception(f"Unable to upload, {filename}, {e}")
@@ -1195,6 +1203,155 @@ def list_blobs_df(
     df = pd.DataFrame(results, columns=["filename", "file_size_mb", "creation_time"])
     df = df.sort_values("creation_time", ascending=False)
     return df
+
+
+# -----------------------------------------------------------------------------
+# storage table
+# -----------------------------------------------------------------------------
+
+
+def get_status(
+    credential: DefaultAzureCredential,
+    query_uuid: str,
+    storage_table_url: str,
+    storage_table_query_name: str,
+    storage_table_process_name: str,
+    return_failures: bool = True,
+    filesize_units: str = "GB",
+) -> dict:
+    """
+    Gets status of submitted query
+    Args:
+        query_uuid: query uuid or "PartitionKey"
+            format: "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        storage_table_url: storage table url
+            format: "https://{storage_account_name}.table.core.windows.net/"
+        storage_table_query_name: name of storage table for query logs
+        storage_table_process_name: name of storage table for process logs
+        return_failures: will return details on failed jobs/messages
+        filesize_units: "MB", "GB", or "TB"
+    Returns:
+        dict with high-level status properties
+    """
+    # table connections
+    table_client_query = TableClient(
+        storage_table_url, storage_table_query_name, credential=credential
+    )
+    table_client_process = TableClient(
+        storage_table_url, storage_table_process_name, credential=credential
+    )
+    # get results from azure storage tables
+    search_odata_string = f"PartitionKey eq '{query_uuid}'"
+    query_results = table_client_query.query_entities(search_odata_string)
+    process_results = table_client_process.query_entities(search_odata_string)
+    # convert to dataframes
+    query_results_df = pd.DataFrame(query_results)
+    if query_results_df.shape[0] == 0:
+        raise Exception("Query UUID not found in query logs")
+    elif query_results_df.shape[0] > 1:
+        logging.info(
+            f"Warning: Found more than 1 row with same Query UUID in query logs"
+        )
+    query_results_df = query_results_df.rename(columns={"PartitionKey": "QueryUUID"})[
+        [
+            "QueryUUID",
+            "TimeGenerated",
+            "Status",
+            "Tables",
+            "StartDatetime",
+            "EndDatetime",
+            "MessagesSentToQueue",
+            "TotalRowCount",
+            "RuntimeSeconds",
+        ]
+    ]
+    process_results_df = pd.DataFrame(process_results)
+    if process_results_df.shape[0] == 0:
+        raise Exception("Query UUID not found in process logs")
+    process_results_df = process_results_df.rename(
+        columns={"PartitionKey": "QueryUUID"}
+    )[
+        [
+            "QueryUUID",
+            "TimeGenerated",
+            "Status",
+            "SubQuery",
+            "Table",
+            "StartDatetime",
+            "EndDatetime",
+            "RowCount",
+            "Filename",
+            "FileSizeBytes",
+            "RuntimeSeconds",
+        ]
+    ]
+    # split data
+    success_process_results_df = process_results_df[
+        process_results_df["Status"] == "Success"
+    ]
+    failed_process_results_df = process_results_df[
+        process_results_df["Status"] == "Failed"
+    ]
+    # summarize results
+    query_submit_status = ", ".join(query_results_df.Status)
+    query_total_row_count = query_results_df.TotalRowCount.sum()
+    number_of_subqueries = query_results_df.MessagesSentToQueue.sum()
+    number_of_successful_subqueries = success_process_results_df.shape[0]
+    number_of_failed_subqueries = failed_process_results_df.shape[0]
+    total_success_bytes = success_process_results_df.FileSizeBytes.sum()
+    total_success_row_count = success_process_results_df.RowCount.sum()
+    total_success_runtime_sec = success_process_results_df.RuntimeSeconds.sum()
+    # processing status
+    if (
+        number_of_successful_subqueries == number_of_subqueries
+        and total_success_row_count == query_total_row_count
+    ):
+        processing_status = "Complete"
+    else:
+        processing_status = "Partial"
+    percent_commplete = (number_of_successful_subqueries / number_of_subqueries) * 100
+    percent_commplete = round(percent_commplete, 1)
+    # response
+    results = {
+        "query_uuid": query_uuid,
+        "query_submit_status": query_submit_status,
+        "query_processing_status": processing_status,
+        "processing_percent_complete": float(percent_commplete),
+        "number_of_subqueries": int(number_of_subqueries),
+        "number_of_subqueries_success": number_of_successful_subqueries,
+        "number_of_subqueries_failed": number_of_failed_subqueries,
+        "query_total_row_count": int(query_total_row_count),
+        "success_total_row_count": int(total_success_row_count),
+    }
+    # file size
+    if filesize_units == "GB":
+        divisor = 1_000_000_000
+        results["success_total_size_GB"] = float(
+            round(total_success_bytes / divisor, 3)
+        )
+    elif filesize_units == "TB":
+        divisor = 1_000_000_000_000
+        results["success_total_size_TB"] = float(
+            round(total_success_bytes / divisor, 3)
+        )
+    else:
+        divisor = 1_000_000
+        results["success_total_size_MB"] = float(
+            round(total_success_bytes / divisor, 3)
+        )
+    results["runtime_seconds"] = round(total_success_runtime_sec, 1)
+    # failures
+    if return_failures and failed_process_results_df.shape[0] > 0:
+        export_cols = [
+            "SubQuery",
+            "Table",
+            "StartDatetime",
+            "EndDatetime",
+            "RowCount",
+        ]
+        export_df = failed_process_results_df[export_cols]
+        results["failures"] = export_df.to_dict(orient="records")
+    return results
 
 
 # --------------------------------------------------------------------------------------
@@ -1401,13 +1558,13 @@ def azure_log_analytics_process_queue(msg: func.QueueMessage) -> None:
     queue_name=storage_queue_poison_name,
     connection="storageAccountConnectionString",
 )
-def azure_log_analytics_process_queue_poison(msg: func.QueueMessage) -> None:
+def azure_process_poison_queue(msg: func.QueueMessage) -> None:
     """
     Azure Function to process poisoned messages/jobs in queue and send to log table
     """
     start_time = time.time()
     logging.info(f"Python storage queue event triggered")
-    logging.info("Running azure_log_analytics_process_queue_poison function...")
+    logging.info("Running azure_process_poison_queue function...")
     try:
         # validate message
         message = msg.get_json()
@@ -1450,3 +1607,62 @@ def azure_log_analytics_process_queue_poison(msg: func.QueueMessage) -> None:
     except Exception as e:
         logging.info(f"Invalid message: {msg.get_body().decode('utf-8')}")
         raise Exception(f"Failed: {e}")
+
+
+@app.route(route="azure_get_query_status")
+def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Azure Function to get query status
+    HTTP Request Body must contain the following fields:
+        - query_uuid: str
+        - storage_table_url: str
+        - storage_table_query_name: str
+        - storage_table_process_name: str
+        - return_failures: bool (optional, defaults to True)
+        - filesize_units: str (optional, defaults to GB)
+    """
+    logging.info("Python HTTP trigger function processed a request")
+    logging.info("Running azure_get_query_status function...")
+    # request inputs
+    request_body = req.get_json()
+    query_uuid = request_body.get("query_uuid")
+    storage_table_url = request_body.get("storage_table_url")
+    storage_table_query_name = request_body.get("storage_table_query_name")
+    storage_table_process_name = request_body.get("storage_table_process_name")
+    # optional fields
+    return_failures = request_body.get("return_failures")
+    if not return_failures:
+        return_failures = True
+    filesize_units = request_body.get("filesize_units")
+    if not filesize_units:
+        filesize_units = "GB"
+    # input validation
+    if (
+        query_uuid
+        and storage_table_url
+        and storage_table_query_name
+        and storage_table_process_name
+        and return_failures
+        and filesize_units
+    ):
+        logging.info("Valid Inputs")
+    else:
+        return func.HttpResponse("Invalid Inputs", status_code=400)
+    # get status
+    try:
+        results = get_status(
+            credential,
+            query_uuid,
+            storage_table_url,
+            storage_table_query_name,
+            storage_table_process_name,
+            return_failures=return_failures,
+            filesize_units=filesize_units,
+        )
+        logging.info(f"Success: {results}")
+    except Exception as e:
+        return func.HttpResponse(f"Failed: {e}", status_code=500)
+    # response
+    return func.HttpResponse(
+        json.dumps(results), mimetype="application/json", status_code=200
+    )
