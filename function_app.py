@@ -18,6 +18,7 @@ from azure.monitor.query import LogsQueryClient, LogsQueryStatus
 from azure.storage.blob import ContainerClient
 from azure.storage.queue import QueueClient, QueueMessage
 from azure.data.tables import TableClient, UpdateMode
+from pydantic import BaseModel, Field
 
 # azure function app
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -40,7 +41,7 @@ credential = DefaultAzureCredential()
 # add 2. storageAccountConnectionString__credential -> managedidentity
 # add 3. QueueName -> <QUEUE_NAME>
 env_var_storage_queue_name = os.environ["QueueName"]
-storage_queue_poison_name = env_var_storage_queue_name + "-poison"
+storage_poison_queue_name = env_var_storage_queue_name + "-poison"
 
 # -----------------------------------------------------------------------------
 # log analytics ingest
@@ -166,7 +167,7 @@ def generate_and_ingest_test_data(
             format: "https://{storage_account_name}.table.core.windows.net/"
         storage_table_ingest_name: name of storage table for ingest logs
         start_date: date to insert fake data
-            format: "02-08-2024 00:00:00.000000"
+            format: YYYY-MM-DD HH:MM:SS
             note: can only ingest dates up to 2 days in the past and 1 day into the future
             reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/log-standard-columns
         timedelta_seconds: time between each fake data row
@@ -1354,51 +1355,81 @@ def get_status(
     return results
 
 
+# -----------------------------------------------------------------------------
+# Pydantic input validation for HTTP requests
+# -----------------------------------------------------------------------------
+
+uuid_re = (
+    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+datetime_re = "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
+url_re = "^(http|https)://"
+dcr_re = "^dcr-"
+
+
+class IngestHttpRequest(BaseModel):
+    log_analytics_data_collection_endpoint: str = Field(pattern=url_re, min_length=10)
+    log_analytics_data_collection_rule_id: str = Field(pattern=dcr_re, min_length=5)
+    log_analytics_data_collection_stream_name: str = Field(min_length=3)
+    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    storage_table_ingest_name: str = Field(min_length=3)
+    start_datetime: str = Field(pattern=datetime_re)
+    timedelta_seconds: float = Field(gt=0.0)
+    number_of_rows: int = Field(gt=0)
+
+
+class SubmitQueryHttpRequest(BaseModel):
+    query_uuid: str = Field(default=str(uuid.uuid4()), pattern=uuid_re)
+    subscription_id: str = Field(pattern=uuid_re)
+    resource_group_name: str = Field(min_length=3)
+    log_analytics_worksapce_name: str = Field(min_length=3)
+    log_analytics_workspace_id: str = Field(pattern=uuid_re)
+    storage_queue_url: str = Field(pattern=url_re, min_length=10)
+    storage_queue_name: str = Field(min_length=3)
+    storage_blob_url: str = Field(pattern=url_re, min_length=10)
+    storage_blob_container_name: str = Field(min_length=3)
+    storage_blob_output_format: str = Field(default="JSONL", min_length=3)
+    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    storage_table_query_name: str = Field(min_length=3)
+    storage_table_process_name: str = Field(min_length=3)
+    table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
+    start_datetime: str = Field(pattern=datetime_re)
+    end_datetime: str = Field(pattern=datetime_re)
+
+
+class GetQueryStatusHttpRequest(BaseModel):
+    query_uuid: str = Field(pattern=uuid_re)
+    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    storage_table_query_name: str = Field(min_length=3)
+    storage_table_process_name: str = Field(min_length=3)
+    return_failures: bool = Field(default=True)
+    filesize_units: str = Field(default="GB", min_length=2)
+
+
 # --------------------------------------------------------------------------------------
-# Azure Functions
+# Azure Functions - HTTP Triggers
 # --------------------------------------------------------------------------------------
 
 
-@app.route(route="azure_log_analytics_generate_test_data")
-def azure_log_analytics_generate_test_data(req: func.HttpRequest) -> func.HttpResponse:
-    """
-    Azure Function to generate test data and ingest to log analytics
-    HTTP Request Body must contain the following fields:
-        - log_analytics_data_collection_endpoint: str
-        - log_analytics_data_collection_rule_id: str
-        - log_analytics_data_collection_stream_name: str
-        - storage_table_url: str
-        - storage_table_ingest_name: str
-        - start_datetime: str
-        - timedelta_seconds: str
-        - number_of_rows: int
-    """
+@app.route(route="azure_ingest_test_data")
+def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running azure_log_analytics_generate_test_data function...")
-    # request inputs
-    request_body = req.get_json()
-    endpoint = request_body.get("log_analytics_data_collection_endpoint")
-    rule_id = request_body.get("log_analytics_data_collection_rule_id")
-    stream_name = request_body.get("log_analytics_data_collection_stream_name")
-    storage_table_url = request_body.get("storage_table_url")
-    storage_table_ingest_name = request_body.get("storage_table_ingest_name")
-    start_datetime = request_body.get("start_datetime")
-    timedelta_seconds = request_body.get("timedelta_seconds")
-    number_of_rows = request_body.get("number_of_rows")
+    logging.info("Running azure_ingest_test_data function...")
     # input validation
-    if (
-        endpoint
-        and rule_id
-        and stream_name
-        and storage_table_url
-        and storage_table_ingest_name
-        and start_datetime
-        and timedelta_seconds
-        and number_of_rows
-    ):
-        logging.info("Valid Inputs")
-    else:
-        return func.HttpResponse("Invalid Inputs", status_code=400)
+    request_body = req.get_json()
+    try:
+        validated_inputs = IngestHttpRequest.model_validate(request_body)
+    except Exception as e:
+        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
+    # extract fields
+    endpoint = validated_inputs.log_analytics_data_collection_endpoint
+    rule_id = validated_inputs.log_analytics_data_collection_rule_id
+    stream_name = validated_inputs.log_analytics_data_collection_stream_name
+    storage_table_url = validated_inputs.storage_table_url
+    storage_table_ingest_name = validated_inputs.storage_table_ingest_name
+    start_datetime = validated_inputs.start_datetime
+    timedelta_seconds = validated_inputs.timedelta_seconds
+    number_of_rows = validated_inputs.number_of_rows
     # generate fake data and ingest
     try:
         results = generate_and_ingest_test_data(
@@ -1421,78 +1452,35 @@ def azure_log_analytics_generate_test_data(req: func.HttpRequest) -> func.HttpRe
     )
 
 
-@app.route(route="azure_log_analytics_query_send_to_queue")
-def azure_log_analytics_query_send_to_queue(
+@app.route(route="azure_submit_query")
+def azure_submit_query(
     req: func.HttpRequest,
 ) -> func.HttpResponse:
-    """
-    Azure Function to split query and send messages/jobs to storage queue
-    HTTP Request Body must contain the following fields:
-        - uuid: str (optional, random value will be generated if missing)
-        - subscription_id: str
-        - resource_group_name: str
-        - log_analytics_worksapce_name: str
-        - log_analytics_workspace_id: str
-        - storage_queue_url: str
-        - storage_queue_name: str
-        - storage_blob_url: str
-        - storage_blob_container_name: str
-        - storage_blob_output_format: str (optional, will default to JSONL)
-        - storage_table_url: str
-        - storage_table_query_name: str
-        - storage_table_process_name: str
-        - table_names_and_columns: dict
-        - start_datetime: str
-        - end_datetime: str
-    """
     logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running azure_log_analytics_query_send_to_queue function...")
-    # request inputs
-    request_body = req.get_json()
-    subscription_id = request_body.get("subscription_id")
-    resource_group_name = request_body.get("resource_group_name")
-    log_analytics_worksapce_name = request_body.get("log_analytics_worksapce_name")
-    log_analytics_workspace_id = request_body.get("log_analytics_workspace_id")
-    storage_queue_url = request_body.get("storage_queue_url")
-    storage_queue_name = request_body.get("storage_queue_name")
-    storage_blob_url = request_body.get("storage_blob_url")
-    storage_blob_container_name = request_body.get("storage_blob_container_name")
-    storage_table_url = request_body.get("storage_table_url")
-    storage_table_query_name = request_body.get("storage_table_query_name")
-    storage_table_process_name = request_body.get("storage_table_process_name")
-    table_names_and_columns = request_body.get("table_names_and_columns")
-    start_datetime = request_body.get("start_datetime")
-    end_datetime = request_body.get("end_datetime")
-    # uuid (optional field)
-    query_uuid = request_body.get("uuid")
-    if not query_uuid:
-        query_uuid = str(uuid.uuid4())
-    # output format (optional field)
-    storage_blob_output_format = request_body.get("storage_blob_output_format")
-    if not storage_blob_output_format:
-        storage_blob_output_format = "JSONL"
+    logging.info("Running azure_submit_query function...")
     # input validation
-    if (
-        subscription_id
-        and resource_group_name
-        and log_analytics_worksapce_name
-        and log_analytics_workspace_id
-        and storage_queue_url
-        and storage_queue_name
-        and storage_blob_url
-        and storage_blob_container_name
-        and storage_table_url
-        and storage_table_query_name
-        and storage_table_process_name
-        and table_names_and_columns
-        and start_datetime
-        and end_datetime
-        and query_uuid
-        and storage_blob_output_format
-    ):
-        logging.info("Valid Inputs")
-    else:
-        return func.HttpResponse("Invalid Inputs", status_code=400)
+    request_body = req.get_json()
+    try:
+        validated_inputs = SubmitQueryHttpRequest.model_validate(request_body)
+    except Exception as e:
+        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
+    # extract fields
+    query_uuid = validated_inputs.query_uuid
+    subscription_id = validated_inputs.subscription_id
+    resource_group_name = validated_inputs.resource_group_name
+    log_analytics_worksapce_name = validated_inputs.log_analytics_worksapce_name
+    log_analytics_workspace_id = validated_inputs.log_analytics_workspace_id
+    storage_queue_url = validated_inputs.storage_queue_url
+    storage_queue_name = validated_inputs.storage_queue_name
+    storage_blob_url = validated_inputs.storage_blob_url
+    storage_blob_container_name = validated_inputs.storage_blob_container_name
+    storage_blob_output_format = validated_inputs.storage_blob_output_format
+    storage_table_url = validated_inputs.storage_table_url
+    storage_table_query_name = validated_inputs.storage_table_query_name
+    storage_table_process_name = validated_inputs.storage_table_process_name
+    table_names_and_columns = validated_inputs.table_names_and_columns
+    start_datetime = validated_inputs.start_datetime
+    end_datetime = validated_inputs.end_datetime
     # split query, generate messages, and send to queue
     try:
         results = query_log_analytics_send_to_queue(
@@ -1523,20 +1511,60 @@ def azure_log_analytics_query_send_to_queue(
     )
 
 
-# note: to fix message encoding errors (default is base64):
+@app.route(route="azure_get_query_status")
+def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("Python HTTP trigger function processed a request")
+    logging.info("Running azure_get_query_status function...")
+    # input validation
+    request_body = req.get_json()
+    try:
+        validated_inputs = GetQueryStatusHttpRequest.model_validate(request_body)
+    except Exception as e:
+        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
+    # extract fields
+    query_uuid = validated_inputs.query_uuid
+    storage_table_url = validated_inputs.storage_table_url
+    storage_table_query_name = validated_inputs.storage_table_query_name
+    storage_table_process_name = validated_inputs.storage_table_process_name
+    return_failures = validated_inputs.return_failures
+    filesize_units = validated_inputs.filesize_units
+    # get status
+    try:
+        results = get_status(
+            credential,
+            query_uuid,
+            storage_table_url,
+            storage_table_query_name,
+            storage_table_process_name,
+            return_failures=return_failures,
+            filesize_units=filesize_units,
+        )
+        logging.info(f"Success: {results}")
+    except Exception as e:
+        return func.HttpResponse(f"Failed: {e}", status_code=500)
+    # response
+    return func.HttpResponse(
+        json.dumps(results), mimetype="application/json", status_code=200
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Azure Functions - Queue Triggers
+# --------------------------------------------------------------------------------------
+
+# fix for message encoding errors (default is base64):
 # add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 # failed messages are sent to <QUEUE_NAME>-poison
+
+
 @app.queue_trigger(
     arg_name="msg",
     queue_name=env_var_storage_queue_name,
     connection="storageAccountConnectionString",
 )
-def azure_log_analytics_process_queue(msg: func.QueueMessage) -> None:
-    """
-    Azure Function to process messages/jobs in queue and send results to stoarge blob
-    """
+def azure_process_queue(msg: func.QueueMessage) -> None:
     logging.info(f"Python storage queue event triggered")
-    logging.info("Running azure_log_analytics_process_queue function...")
+    logging.info("Running azure_process_queue function...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1555,16 +1583,13 @@ def azure_log_analytics_process_queue(msg: func.QueueMessage) -> None:
 
 @app.queue_trigger(
     arg_name="msg",
-    queue_name=storage_queue_poison_name,
+    queue_name=storage_poison_queue_name,
     connection="storageAccountConnectionString",
 )
 def azure_process_poison_queue(msg: func.QueueMessage) -> None:
-    """
-    Azure Function to process poisoned messages/jobs in queue and send to log table
-    """
-    start_time = time.time()
     logging.info(f"Python storage queue event triggered")
     logging.info("Running azure_process_poison_queue function...")
+    start_time = time.time()
     try:
         # validate message
         message = msg.get_json()
@@ -1607,62 +1632,3 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
     except Exception as e:
         logging.info(f"Invalid message: {msg.get_body().decode('utf-8')}")
         raise Exception(f"Failed: {e}")
-
-
-@app.route(route="azure_get_query_status")
-def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
-    """
-    Azure Function to get query status
-    HTTP Request Body must contain the following fields:
-        - query_uuid: str
-        - storage_table_url: str
-        - storage_table_query_name: str
-        - storage_table_process_name: str
-        - return_failures: bool (optional, defaults to True)
-        - filesize_units: str (optional, defaults to GB)
-    """
-    logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running azure_get_query_status function...")
-    # request inputs
-    request_body = req.get_json()
-    query_uuid = request_body.get("query_uuid")
-    storage_table_url = request_body.get("storage_table_url")
-    storage_table_query_name = request_body.get("storage_table_query_name")
-    storage_table_process_name = request_body.get("storage_table_process_name")
-    # optional fields
-    return_failures = request_body.get("return_failures")
-    if not return_failures:
-        return_failures = True
-    filesize_units = request_body.get("filesize_units")
-    if not filesize_units:
-        filesize_units = "GB"
-    # input validation
-    if (
-        query_uuid
-        and storage_table_url
-        and storage_table_query_name
-        and storage_table_process_name
-        and return_failures
-        and filesize_units
-    ):
-        logging.info("Valid Inputs")
-    else:
-        return func.HttpResponse("Invalid Inputs", status_code=400)
-    # get status
-    try:
-        results = get_status(
-            credential,
-            query_uuid,
-            storage_table_url,
-            storage_table_query_name,
-            storage_table_process_name,
-            return_failures=return_failures,
-            filesize_units=filesize_units,
-        )
-        logging.info(f"Success: {results}")
-    except Exception as e:
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
-    # response
-    return func.HttpResponse(
-        json.dumps(results), mimetype="application/json", status_code=200
-    )

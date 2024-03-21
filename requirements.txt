@@ -11,3 +11,4 @@ azure-storage-queue
 azure-data-tables
 pandas
 pyarrow
+pydantic
