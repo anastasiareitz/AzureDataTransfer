@@ -11,13 +11,13 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - <b>Output</b>: JSON (list, line delimited), CSV, or PARQUET files
 
 <b>Azure Functions</b>:
-1. <b>azure_log_analytics_generate_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
-2. <b>azure_log_analytics_query_send_to_queue()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
-3. <b>azure_log_analytics_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
+1. <b>azure_ingest_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
+2. <b>azure_submit_query()</b>: HTTP Trigger, divides request into smaller queries/jobs and sends to storage queue
+3. <b>azure_process_queue()</b>: Storage Queue Trigger, runs jobs from the storage queue and saves results to storage account
 4. <b>azure_process_poison_queue()</b>: Storage Queue Trigger, processes poison queue message and sends to table storage log
 5. <b>azure_get_query_status()</b>: HTTP Trigger, gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/578934a8-5d34-4109-aa54-77b98ce47157)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a4316bc3-7e1f-4353-9ecd-2bf4675d70e5)
 
 ## Files
 
@@ -77,7 +77,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXXXXXX_CL",
     "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
     "storage_table_ingest_name" : "XXXXXXXXXXX",
-    "start_datetime" : "03-19-2024 00:00:00.000000",
+    "start_datetime" : "2024-03-19 00:00:00.000000",
     "timedelta_seconds" : 0.00036,
     "number_of_rows" : 1000000
 }
@@ -117,6 +117,9 @@ The query will be split into chunks and then saved as messages in a storage queu
 ```
 
 ## Changelog
+
+1.3.0:
+- Added pydantic input validation
 
 1.2.0:
 - Added get_status() azure function
