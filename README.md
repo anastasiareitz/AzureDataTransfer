@@ -17,7 +17,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 4. <b>azure_process_poison_queue()</b>: Storage Queue Trigger, processes poison queue message and sends to table storage log
 5. <b>azure_get_query_status()</b>: HTTP Trigger, gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/2b2fbb48-90eb-4fd2-872a-6b3bec7b2d3b)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/004b118e-a6ff-4557-aa3b-439dd962b26d)
 
 ## Files
 
