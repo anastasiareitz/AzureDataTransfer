@@ -7,6 +7,7 @@ import random
 import string
 import time
 import uuid
+from dataclasses import dataclass
 from io import BytesIO, StringIO
 
 import pandas as pd
@@ -20,7 +21,6 @@ from azure.storage.queue import QueueClient, QueueMessage
 from azure.data.tables import TableClient, UpdateMode
 from pydantic import BaseModel, Field
 
-# azure function app
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # azure auth via managed identity
@@ -380,9 +380,7 @@ def break_up_initial_date_range(
     date_range += [end_datetime]
     if date_range[-1] == date_range[-2]:
         date_range.pop(-1)
-    time_pairs = [
-        (date_range[i], date_range[i + 1]) for i in range(len(date_range) - 1)
-    ]
+    time_pairs = [(date_range[i], date_range[i + 1]) for i in range(len(date_range) - 1)]
     # convert to dataframe
     df_time_pairs = pd.DataFrame(time_pairs, columns=["start_date", "end_date"])
     df_time_pairs.insert(loc=0, column="table", value=[table_name] * len(df_time_pairs))
@@ -445,9 +443,7 @@ def query_log_analytics_get_time_ranges(
     # using copy and .loc to prevent chaining warning
     df_copy = df.copy()
     final_endtime = df_copy["EndTime"].tail(1).item()
-    new_final_endtime = str(
-        pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s")
-    )
+    new_final_endtime = str(pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s"))
     new_final_endtime_fix_format = new_final_endtime.replace(" ", "T").replace(
         "00+00:00", "Z"
     )
@@ -967,9 +963,7 @@ def process_queue_message(
     logging.info(f"Processing Message: {message}")
     # query log analytics
     query_results_df = query_log_analytics_get_query_results(log_client, message)
-    logging.info(
-        f"Successfully Downloaded from Log Analytics: {query_results_df.shape}"
-    )
+    logging.info(f"Successfully Downloaded from Log Analytics: {query_results_df.shape}")
     # confirm count matches
     if query_results_df.shape[0] != message["Count"]:
         logging.info(f"Row count doesn't match expected value, {message}")
@@ -1055,9 +1049,7 @@ def process_queue_messages_loop(
     Returns:
         dict of results summary
     """
-    logging.info(
-        f"Processing Queue Messages, press CTRL+C or interupt kernel to stop..."
-    )
+    logging.info(f"Processing Queue Messages, press CTRL+C or interupt kernel to stop...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1250,9 +1242,7 @@ def get_status(
     if query_results_df.shape[0] == 0:
         raise Exception("Query UUID not found in query logs")
     elif query_results_df.shape[0] > 1:
-        logging.info(
-            f"Warning: Found more than 1 row with same Query UUID in query logs"
-        )
+        logging.info(f"Warning: Found more than 1 row with same Query UUID in query logs")
     query_results_df = query_results_df.rename(columns={"PartitionKey": "QueryUUID"})[
         [
             "QueryUUID",
@@ -1269,9 +1259,7 @@ def get_status(
     process_results_df = pd.DataFrame(process_results)
     if process_results_df.shape[0] == 0:
         raise Exception("Query UUID not found in process logs")
-    process_results_df = process_results_df.rename(
-        columns={"PartitionKey": "QueryUUID"}
-    )[
+    process_results_df = process_results_df.rename(columns={"PartitionKey": "QueryUUID"})[
         [
             "QueryUUID",
             "TimeGenerated",
@@ -1327,19 +1315,13 @@ def get_status(
     # file size
     if filesize_units == "GB":
         divisor = 1_000_000_000
-        results["success_total_size_GB"] = float(
-            round(total_success_bytes / divisor, 3)
-        )
+        results["success_total_size_GB"] = float(round(total_success_bytes / divisor, 3))
     elif filesize_units == "TB":
         divisor = 1_000_000_000_000
-        results["success_total_size_TB"] = float(
-            round(total_success_bytes / divisor, 3)
-        )
+        results["success_total_size_TB"] = float(round(total_success_bytes / divisor, 3))
     else:
         divisor = 1_000_000
-        results["success_total_size_MB"] = float(
-            round(total_success_bytes / divisor, 3)
-        )
+        results["success_total_size_MB"] = float(round(total_success_bytes / divisor, 3))
     results["runtime_seconds"] = round(total_success_runtime_sec, 1)
     # failures
     if return_failures and failed_process_results_df.shape[0] > 0:
@@ -1359,49 +1341,52 @@ def get_status(
 # Pydantic input validation for HTTP requests
 # -----------------------------------------------------------------------------
 
-uuid_re = (
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
-datetime_re = r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
-url_re = r"^(http|https)://"
-dcr_re = r"^dcr-"
+# Expected Datetime Format: "YYYY-MM-DD HH:MM:SS.SSSSSS"
 
-datetime_format = "Datetime, Format: YYYY-MM-DD HH:MM:SS.SSSSSS"
+
+@dataclass
+class RegEx:
+    uuid: str = (
+        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    )
+    datetime: str = r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
+    url: str = r"^(http|https)://"
+    dcr: str = r"^dcr-"
 
 
 class IngestHttpRequest(BaseModel):
-    log_analytics_data_collection_endpoint: str = Field(pattern=url_re, min_length=10)
-    log_analytics_data_collection_rule_id: str = Field(pattern=dcr_re, min_length=5)
+    log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
+    log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
-    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_table_ingest_name: str = Field(min_length=3)
-    start_datetime: str = Field(pattern=datetime_re, description=datetime_format)
+    start_datetime: str = Field(pattern=RegEx.datetime)
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
 
 
 class SubmitQueryHttpRequest(BaseModel):
-    query_uuid: str = Field(default=str(uuid.uuid4()), pattern=uuid_re)
-    subscription_id: str = Field(pattern=uuid_re)
+    query_uuid: str = Field(default=str(uuid.uuid4()), pattern=RegEx.uuid)
+    subscription_id: str = Field(pattern=RegEx.uuid)
     resource_group_name: str = Field(min_length=3)
     log_analytics_worksapce_name: str = Field(min_length=3)
-    log_analytics_workspace_id: str = Field(pattern=uuid_re)
-    storage_queue_url: str = Field(pattern=url_re, min_length=10)
+    log_analytics_workspace_id: str = Field(pattern=RegEx.uuid)
+    storage_queue_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_queue_name: str = Field(min_length=3)
-    storage_blob_url: str = Field(pattern=url_re, min_length=10)
+    storage_blob_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_blob_container_name: str = Field(min_length=3)
     storage_blob_output_format: str = Field(default="JSONL", min_length=3)
-    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_table_query_name: str = Field(min_length=3)
     storage_table_process_name: str = Field(min_length=3)
     table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
-    start_datetime: str = Field(pattern=datetime_re, description=datetime_format)
-    end_datetime: str = Field(pattern=datetime_re, description=datetime_format)
+    start_datetime: str = Field(pattern=RegEx.datetime)
+    end_datetime: str = Field(pattern=RegEx.datetime)
 
 
 class GetQueryStatusHttpRequest(BaseModel):
-    query_uuid: str = Field(pattern=uuid_re)
-    storage_table_url: str = Field(pattern=url_re, min_length=10)
+    query_uuid: str = Field(pattern=RegEx.uuid)
+    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_table_query_name: str = Field(min_length=3)
     storage_table_process_name: str = Field(min_length=3)
     return_failures: bool = Field(default=True)
