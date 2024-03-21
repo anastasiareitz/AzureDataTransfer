@@ -54,7 +54,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 <b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
 1. Azure Portal -> Monitor -> Create Data Collection Endpoint
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
-3. Reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal
+3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
+](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
 
 <b>Azure Storage Setup</b>:
 1. Create a container for data output files
