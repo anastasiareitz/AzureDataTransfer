@@ -1360,11 +1360,13 @@ def get_status(
 # -----------------------------------------------------------------------------
 
 uuid_re = (
-    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-datetime_re = "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
-url_re = "^(http|https)://"
-dcr_re = "^dcr-"
+datetime_re = r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
+url_re = r"^(http|https)://"
+dcr_re = r"^dcr-"
+
+datetime_format = "Datetime, Format: YYYY-MM-DD HH:MM:SS.SSSSSS"
 
 
 class IngestHttpRequest(BaseModel):
@@ -1373,7 +1375,7 @@ class IngestHttpRequest(BaseModel):
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
     storage_table_url: str = Field(pattern=url_re, min_length=10)
     storage_table_ingest_name: str = Field(min_length=3)
-    start_datetime: str = Field(pattern=datetime_re)
+    start_datetime: str = Field(pattern=datetime_re, description=datetime_format)
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
 
@@ -1393,8 +1395,8 @@ class SubmitQueryHttpRequest(BaseModel):
     storage_table_query_name: str = Field(min_length=3)
     storage_table_process_name: str = Field(min_length=3)
     table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
-    start_datetime: str = Field(pattern=datetime_re)
-    end_datetime: str = Field(pattern=datetime_re)
+    start_datetime: str = Field(pattern=datetime_re, description=datetime_format)
+    end_datetime: str = Field(pattern=datetime_re, description=datetime_format)
 
 
 class GetQueryStatusHttpRequest(BaseModel):
