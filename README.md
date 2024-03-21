@@ -28,13 +28,14 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ## Setup Notes
 
-<b>Azure Resources Required</b>:
+<b>Azure Resources</b>:
 1. Log Analytics Workspace (data source)
 2. Storage Account
 - Container (data output destination)
 - Queue (temp storage for split query messages/jobs)
 - Table (logging for status checks)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
+4. Azure API Management (frontend user interface, optional) 
 
 <b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
 - Setup via Azure Portal -> Function App -> Identity -> System Assigned -> On -> Azure Role Assignments
