@@ -1001,7 +1001,9 @@ def process_queue_message(
     sub_query_index = message["SubQuery"]
     table_name = message["Table"]
     start_datetime = message["StartDatetime"]
+    start_datetime = start_datetime.replace("T", " ").replace("Z", "")
     end_datetime = message["EndDatetime"]
+    end_datetime = end_datetime.replace("T", " ").replace("Z", "")
     row_count = message["Count"]
     # generate unique row key
     row_key = f"{query_uuid}__{status}__{table_name}__"
@@ -1594,7 +1596,9 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
         sub_query_index = message["SubQuery"]
         table_name = message["Table"]
         start_datetime = message["StartDatetime"]
+        start_datetime = start_datetime.replace("T", " ").replace("Z", "")
         end_datetime = message["EndDatetime"]
+        end_datetime = end_datetime.replace("T", " ").replace("Z", "")
         row_count = message["Count"]
         # logging to storage table
         time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
