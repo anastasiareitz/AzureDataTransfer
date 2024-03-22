@@ -70,7 +70,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
   
 ## Usage
 
-1. (Optional) Execute HTTP trigger <b>azure_log_analytics_generate_test_data()</b> to generate test/fake data and ingest into Log Analytics. 
+1. (Optional) Execute HTTP trigger <b>azure_ingest_test_data()</b> to generate test/fake data and ingest into Log Analytics. 
 
 ```json
 {
@@ -85,7 +85,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 }
 ```
 
-2. Execute HTTP trigger <b>azure_log_analytics_query_send_to_queue()</b> with query and connection parameters:
+2. Execute HTTP trigger <b>azure_submit_query()</b> with query and connection parameters:
 
 ```json
 {
