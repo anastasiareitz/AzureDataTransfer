@@ -1292,6 +1292,19 @@ def get_status(
     total_success_bytes = success_process_results_df.FileSizeBytes.sum()
     total_success_row_count = success_process_results_df.RowCount.sum()
     total_success_runtime_sec = success_process_results_df.RuntimeSeconds.sum()
+    # time since query submit
+    query_results_df_copy = query_results_df.copy()
+    query_results_df_copy["TimeGenerated"] = pd.to_datetime(
+        query_results_df.TimeGenerated
+    )
+    process_results_df_copy = process_results_df.copy()
+    process_results_df_copy["TimeGenerated"] = pd.to_datetime(
+        process_results_df_copy.TimeGenerated
+    )
+    query_submit_datetime = query_results_df_copy["TimeGenerated"].min()
+    last_processing_datetime = process_results_df_copy["TimeGenerated"].max()
+    time_since_query = last_processing_datetime - query_submit_datetime
+    time_since_query_seconds = time_since_query.total_seconds()
     # processing status
     if (
         number_of_successful_subqueries == number_of_subqueries
@@ -1324,7 +1337,8 @@ def get_status(
     else:
         divisor = 1_000_000
         results["success_total_size_MB"] = float(round(total_success_bytes / divisor, 3))
-    results["runtime_seconds"] = round(total_success_runtime_sec, 1)
+    results["runtime_total_seconds"] = round(total_success_runtime_sec, 1)
+    results["runtime_since_submit_seconds"] = round(time_since_query_seconds, 1)
     # failures
     if return_failures and failed_process_results_df.shape[0] > 0:
         export_cols = [
