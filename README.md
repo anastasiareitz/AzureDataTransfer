@@ -73,6 +73,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 1. (Optional) Execute HTTP trigger <b>azure_ingest_test_data()</b> to generate test/fake data and ingest into Log Analytics. 
 
+- HTTP POST Request Body:
+
 ```json
 {
     "log_analytics_data_collection_endpoint" : "https://XXXXXXXXXXXXXX-XXXXXXX.XXXXXX.ingest.monitor.azure.com",
@@ -80,14 +82,34 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXXXXXX_CL",
     "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
     "storage_table_ingest_name" : "XXXXXXXXXXX",
-    "start_datetime" : "2024-03-19 00:00:00.000000",
+    "start_datetime" : "2024-03-26 00:00:00.000000",
     "timedelta_seconds" : 0.00036,
     "number_of_rows" : 1000000
 }
 ```
 
+- HTTP Response:
+
+```json
+{
+    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "query_ingest_status": "Success",
+    "table_stream_name": "Custom-XXXXXXXXXXXXXX_CL",
+    "start_datetime": "2024-03-26 00:00:00.000000",
+    "end_datetime": "2024-03-26 00:05:59.999640",
+    "number_of_columns": 10,
+    "rows_generated": 1000000,
+    "rows_ingested": 1000000,
+    "valid_datetime_range": true,
+    "runtime_seconds": 59.1,
+    "query_ingest_datetime": "2024-03-26 16:21:24.220491"
+}
+```
+
 2. Execute HTTP trigger <b>azure_submit_query()</b> with query and connection parameters:
 
+- HTTP POST Request Body:
+  
 ```json
 {
     "subscription_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
@@ -106,10 +128,30 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "end_datetime" : "2024-03-20 00:00:00"
 }
 ```
+
+- HTTP Response:
+
+```json
+{
+    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "query_submit_status": "Success",
+    "table_names": "XXXXXXXXXXX_CL",
+    "start_datetime": "2024-03-19 00:00:00.000000",
+    "end_datetime": "2024-03-20 00:00:00.000000",
+    "total_row_count": 23000000,
+    "subqueries_generated": 95,
+    "subqueries_sent_to_queue": 95,
+    "runtime_seconds": 92.1,
+    "query_submit_datetime": "2024-03-26 16:24:38.771336"
+}
+```
+
 The query will be split into chunks and then saved as messages in a storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages in parallel and send the results to a storage account container. 
 
 3. Execute HTTP trigger <b>azure_get_query_status()</b> with query uuid and connection parameters:
 
+- HTTP POST Request Body:
+  
 ```json
 {
     "query_uuid" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
@@ -117,6 +159,25 @@ The query will be split into chunks and then saved as messages in a storage queu
     "storage_table_query_name" : "XXXXXXXXX",
     "storage_table_process_name" : "XXXXXXXXXXXXX"
 }
+```
+
+- HTTP Response:
+
+```json
+{
+    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX", 
+    "query_submit_status": "Success", 
+    "query_processing_status": "Partial", 
+    "processing_percent_complete": 67.4, 
+    "number_of_subqueries": 95, 
+    "number_of_subqueries_success": 64, 
+    "number_of_subqueries_failed": 0, 
+    "query_total_row_count": 23000000, 
+    "success_total_row_count": 15493871, 
+    "success_total_size_GB": 4.555, 
+    "runtime_total_seconds": 3836.4, 
+    "runtime_since_submit_seconds": 1003.2
+  }
 ```
 
 ## Changelog
