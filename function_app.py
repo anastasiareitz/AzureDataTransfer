@@ -1450,8 +1450,21 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
+    return_resposne = {
+        "query_uuid" : results["PartitionKey"],
+        "query_ingest_status" : results["Status"],
+        "table_stream_name" : stream_name,
+        "start_datetime" : results["StartDatetime"],
+        "end_datetime" : results["EndDatetime"],
+        "number_of_columns" : results["NumberColumns"],
+        "rows_generated" : results["RowsGenerated"],
+        "rows_ingested" : results["RowsIngested"],
+        "valid_datetime_range" : results["ValidDatetimeRange"],
+        "runtime_seconds" : results["RuntimeSeconds"],
+        "query_ingest_datetime" : results["TimeGenerated"]
+    }
     return func.HttpResponse(
-        json.dumps(results), mimetype="application/json", status_code=200
+        json.dumps(return_resposne), mimetype="application/json", status_code=200
     )
 
 
@@ -1509,8 +1522,20 @@ def azure_submit_query(
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
+    return_resposne = {
+        "query_uuid" : results["PartitionKey"],
+        "query_submit_status" : results["Status"],
+        "table_names" : results["Tables"],
+        "start_datetime" : results["StartDatetime"],
+        "end_datetime" : results["EndDatetime"],
+        "total_row_count" : results["TotalRowCount"],
+        "subqueries_generated" : results["MessagesGenerated"],
+        "subqueries_sent_to_queue" : results["MessagesSentToQueue"],
+        "runtime_seconds" : results["RuntimeSeconds"],
+        "query_submit_datetime" : results["TimeGenerated"]
+    }
     return func.HttpResponse(
-        json.dumps(results), mimetype="application/json", status_code=200
+        json.dumps(return_resposne), mimetype="application/json", status_code=200
     )
 
 
