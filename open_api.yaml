@@ -1,0 +1,266 @@
+openapi: 3.0.1
+info:
+  title: log-analytics-data-export-app
+  description: log-analytics-data-export-app Azure Function App APIs
+  version: '1.0'
+servers:
+  - url: 'https://<AZURE_APIM_ENDPOINT>.azure-api.net/log-analytics-data-export-app'
+paths:
+  /azure_ingest_test_data:
+    post:
+      summary: azure_ingest_test_data
+      description: Generate and ingest test data to Log Analytics Workspace
+      operationId: azure-ingest-test-data
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/azure_ingest_test_data'
+            example:
+              log_analytics_data_collection_endpoint: string
+              log_analytics_data_collection_rule_id: string
+              log_analytics_data_collection_stream_name: string
+              storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+              storage_table_ingest_name: string
+              start_datetime: 'YYYY-MM-DD HH:MM:SS'
+              timedelta_seconds: 0.001
+              number_of_rows: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+        '400':
+          description: Invalid Request Inputs
+          content:
+            application/json: {}
+        '500':
+          description: Internal Sever Error
+          content:
+            application/json: {}
+  /azure_get_query_status:
+    post:
+      summary: azure_get_query_status
+      description: >-
+        Get current high-level status of query (subqueries, success/failure, row
+        counts, file sizes)
+      operationId: azure-get-query-status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/azure_get_query_status'
+            example:
+              query_uuid: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+              storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+              storage_table_query_name: string
+              storage_table_process_name: string
+              return_failures: true
+              filesize_units: GB
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+        '400':
+          description: Invalid Request Inputs
+          content:
+            application/json: {}
+        '500':
+          description: Internal Sever Error
+          content:
+            application/json: {}
+  /azure_submit_query:
+    post:
+      summary: azure_submit_query
+      description: Submits query to Log Analytics for export
+      operationId: azure-submit-query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/azure_submit_query'
+            example:
+              query_uuid: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+              subscription_id: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+              resource_group_name: string
+              log_analytics_worksapce_name: string
+              log_analytics_workspace_id: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+              storage_queue_url: 'https://<STORAGE_ACCOUNT_NAME>.queue.core.windows.net/'
+              storage_queue_name: string
+              storage_blob_url: 'https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/'
+              storage_blob_container_name: string
+              storage_blob_output_format: JSONL
+              storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+              storage_table_query_name: string
+              storage_table_process_name: string
+              table_names_and_columns:
+                table_name:
+                  - string
+              start_datetime: 'YYYY-MM-DD HH:MM:SS'
+              end_datetime: 'YYYY-MM-DD HH:MM:SS'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+        '400':
+          description: Invalid Request Inputs
+          content:
+            application/json: {}
+        '500':
+          description: Internal Sever Error
+          content:
+            application/json: {}
+components:
+  schemas:
+    azure_ingest_test_data:
+      required:
+        - log_analytics_data_collection_endpoint
+        - log_analytics_data_collection_rule_id
+        - log_analytics_data_collection_stream_name
+        - storage_table_url
+        - storage_table_ingest_name
+        - start_datetime
+        - timedelta_seconds
+        - number_of_rows
+      type: object
+      properties:
+        log_analytics_data_collection_endpoint:
+          type: string
+        log_analytics_data_collection_rule_id:
+          type: string
+        log_analytics_data_collection_stream_name:
+          type: string
+        storage_table_url:
+          type: string
+        storage_table_ingest_name:
+          type: string
+        start_datetime:
+          type: string
+        timedelta_seconds:
+          type: number
+        number_of_rows:
+          type: integer
+      example:
+        log_analytics_data_collection_endpoint: string
+        log_analytics_data_collection_rule_id: string
+        log_analytics_data_collection_stream_name: string
+        storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+        storage_table_ingest_name: string
+        start_datetime: 'YYYY-MM-DD HH:MM:SS'
+        timedelta_seconds: 0.001
+        number_of_rows: 1
+    azure_get_query_status:
+      required:
+        - query_uuid
+        - storage_table_url
+        - storage_table_query_name
+        - storage_table_process_name
+      type: object
+      properties:
+        query_uuid:
+          type: string
+        storage_table_url:
+          type: string
+        storage_table_query_name:
+          type: string
+        storage_table_process_name:
+          type: string
+        return_failures:
+          type: boolean
+        filesize_units:
+          type: string
+      example:
+        query_uuid: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+        storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+        storage_table_query_name: string
+        storage_table_process_name: string
+        return_failures: true
+        filesize_units: GB
+    azure_submit_query:
+      required:
+        - subscription_id
+        - resource_group_name
+        - log_analytics_worksapce_name
+        - log_analytics_workspace_id
+        - storage_queue_url
+        - storage_queue_name
+        - storage_blob_url
+        - storage_blob_container_name
+        - storage_table_url
+        - storage_table_query_name
+        - storage_table_process_name
+        - table_names_and_columns
+        - start_datetime
+        - end_datetime
+      type: object
+      properties:
+        query_uuid:
+          type: string
+        subscription_id:
+          type: string
+        resource_group_name:
+          type: string
+        log_analytics_worksapce_name:
+          type: string
+        log_analytics_workspace_id:
+          type: string
+        storage_queue_url:
+          type: string
+        storage_queue_name:
+          type: string
+        storage_blob_url:
+          type: string
+        storage_blob_container_name:
+          type: string
+        storage_blob_output_format:
+          type: string
+        storage_table_url:
+          type: string
+        storage_table_query_name:
+          type: string
+        storage_table_process_name:
+          type: string
+        table_names_and_columns:
+          type: object
+          properties:
+            table_name:
+              type: array
+              items:
+                type: string
+        start_datetime:
+          type: string
+        end_datetime:
+          type: string
+      example:
+        query_uuid: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+        subscription_id: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+        resource_group_name: string
+        log_analytics_worksapce_name: string
+        log_analytics_workspace_id: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+        storage_queue_url: 'https://<STORAGE_ACCOUNT_NAME>.queue.core.windows.net/'
+        storage_queue_name: string
+        storage_blob_url: 'https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/'
+        storage_blob_container_name: string
+        storage_blob_output_format: JSONL
+        storage_table_url: 'https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/'
+        storage_table_query_name: string
+        storage_table_process_name: string
+        table_names_and_columns:
+          table_name:
+            - string
+        start_datetime: 'YYYY-MM-DD HH:MM:SS'
+        end_datetime: 'YYYY-MM-DD HH:MM:SS'
+  securitySchemes:
+    apiKeyHeader:
+      type: apiKey
+      name: Ocp-Apim-Subscription-Key
+      in: header
+    apiKeyQuery:
+      type: apiKey
+      name: subscription-key
+      in: query
+security:
+  - apiKeyHeader: []
+  - apiKeyQuery: []
