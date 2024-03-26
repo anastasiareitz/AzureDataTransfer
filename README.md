@@ -25,6 +25,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - <b>function_app.py</b>: Azure Function App python source code
 - <b>host.json</b>: Azure Function App settings
 - <b>requirements.txt</b>: python package requirements file
+- <b>open_api.yaml</b>: Open API definitions
 
 ## Setup Notes
 
