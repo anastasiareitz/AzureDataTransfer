@@ -123,6 +123,7 @@ The query will be split into chunks and then saved as messages in a storage queu
 
 1.3.0:
 - Added pydantic input validation
+- Added Open API yaml file for Azure API Management
 
 1.2.0:
 - Added get_status() azure function
