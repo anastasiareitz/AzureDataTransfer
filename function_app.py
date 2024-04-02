@@ -1406,6 +1406,7 @@ class IngestHttpRequest(BaseModel):
     start_datetime: str = Field(pattern=RegEx.datetime)
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
+    number_of_columns: int = Field(default=10, gt=2)
 
 
 class SubmitQueryHttpRequest(BaseModel):
@@ -1485,6 +1486,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
     start_datetime = validated_inputs.start_datetime
     timedelta_seconds = validated_inputs.timedelta_seconds
     number_of_rows = validated_inputs.number_of_rows
+    number_of_columns = validated_inputs.number_of_columns
     # generate fake data and ingest
     try:
         results = generate_and_ingest_test_data(
@@ -1497,6 +1499,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
             start_datetime,
             timedelta_seconds,
             number_of_rows,
+            number_of_columns,
         )
         logging.info(f"Success: {results}")
     except Exception as e:
