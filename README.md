@@ -165,19 +165,19 @@ The query will be split into chunks and then saved as messages in a storage queu
 
 ```json
 {
-    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX", 
-    "query_submit_status": "Success", 
-    "query_processing_status": "Partial", 
-    "processing_percent_complete": 67.4, 
-    "number_of_subqueries": 95, 
-    "number_of_subqueries_success": 64, 
-    "number_of_subqueries_failed": 0, 
-    "query_total_row_count": 23000000, 
-    "success_total_row_count": 15493871, 
-    "success_total_size_GB": 4.555, 
-    "runtime_total_seconds": 3836.4, 
-    "runtime_since_submit_seconds": 1003.2
-  }
+    'query_uuid': 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX',
+    'query_submit_status': 'Success',
+    'query_processing_status': 'Partial',
+    'processing_percent_complete': 29.5,
+    'processing_estimated_time_remaining_seconds': 1107.9
+    'number_of_subqueries': 95,
+    'number_of_subqueries_success': 28,
+    'number_of_subqueries_failed': 0,
+    'query_total_row_count': 23000000,
+    'success_total_row_count': 6972002,
+    'success_total_size_GB': 2.05,
+    'runtime_since_submit_seconds': 463.6,
+}
 ```
 
 ## Changelog
