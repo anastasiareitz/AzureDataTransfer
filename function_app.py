@@ -35,13 +35,21 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 credential = DefaultAzureCredential()
 
 # setup for storage queue trigger via managed identity
-# environment variables
+# env variables (required)
 # Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 # add 1. storageAccountConnectionString__queueServiceUri -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 # add 2. storageAccountConnectionString__credential -> managedidentity
 # add 3. QueueName -> <QUEUE_NAME>
 env_var_storage_queue_name = os.environ["QueueName"]
 storage_poison_queue_name = env_var_storage_queue_name + "-poison"
+
+# additional env variables to simplify requests (optional)
+env_var_storage_queue_url = os.environ.get("QueueURL")
+env_var_storage_table_url = os.environ.get("TableURL")
+env_var_storage_table_ingest_name = os.environ.get("TableIngestName")
+env_var_storage_table_query_name = os.environ.get("TableQueryName")
+env_var_storage_table_process_name = os.environ.get("TableProcessName")
+
 
 # -----------------------------------------------------------------------------
 # log analytics ingest
@@ -1386,8 +1394,15 @@ class IngestHttpRequest(BaseModel):
     log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
     log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
-    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
-    storage_table_ingest_name: str = Field(min_length=3)
+    storage_table_url: str = Field(
+        default=env_var_storage_table_url,
+        pattern=RegEx.url,
+        min_length=10,
+        validate_default=True,
+    )
+    storage_table_ingest_name: str = Field(
+        default=env_var_storage_table_ingest_name, min_length=3, validate_default=True
+    )
     start_datetime: str = Field(pattern=RegEx.datetime)
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
@@ -1399,14 +1414,30 @@ class SubmitQueryHttpRequest(BaseModel):
     resource_group_name: str = Field(min_length=3)
     log_analytics_worksapce_name: str = Field(min_length=3)
     log_analytics_workspace_id: str = Field(pattern=RegEx.uuid)
-    storage_queue_url: str = Field(pattern=RegEx.url, min_length=10)
-    storage_queue_name: str = Field(min_length=3)
+    storage_queue_url: str = Field(
+        default=env_var_storage_queue_url,
+        pattern=RegEx.url,
+        min_length=10,
+        validate_default=True,
+    )
+    storage_queue_name: str = Field(
+        default=env_var_storage_queue_name, min_length=3, validate_default=True
+    )
     storage_blob_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_blob_container_name: str = Field(min_length=3)
     storage_blob_output_format: str = Field(default="JSONL", min_length=3)
-    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
-    storage_table_query_name: str = Field(min_length=3)
-    storage_table_process_name: str = Field(min_length=3)
+    storage_table_url: str = Field(
+        default=env_var_storage_table_url,
+        pattern=RegEx.url,
+        min_length=10,
+        validate_default=True,
+    )
+    storage_table_query_name: str = Field(
+        default=env_var_storage_table_query_name, min_length=3, validate_default=True
+    )
+    storage_table_process_name: str = Field(
+        default=env_var_storage_table_process_name, min_length=3, validate_default=True
+    )
     table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
     start_datetime: str = Field(pattern=RegEx.datetime)
     end_datetime: str = Field(pattern=RegEx.datetime)
@@ -1414,9 +1445,18 @@ class SubmitQueryHttpRequest(BaseModel):
 
 class GetQueryStatusHttpRequest(BaseModel):
     query_uuid: str = Field(pattern=RegEx.uuid)
-    storage_table_url: str = Field(pattern=RegEx.url, min_length=10)
-    storage_table_query_name: str = Field(min_length=3)
-    storage_table_process_name: str = Field(min_length=3)
+    storage_table_url: str = Field(
+        default=env_var_storage_table_url,
+        pattern=RegEx.url,
+        min_length=10,
+        validate_default=True,
+    )
+    storage_table_query_name: str = Field(
+        default=env_var_storage_table_query_name, min_length=3, validate_default=True
+    )
+    storage_table_process_name: str = Field(
+        default=env_var_storage_table_process_name, min_length=3, validate_default=True
+    )
     return_failures: bool = Field(default=True)
     filesize_units: str = Field(default="GB", min_length=2)
 
@@ -1463,8 +1503,8 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
-        "query_uuid": results["PartitionKey"],
-        "query_ingest_status": results["Status"],
+        "ingest_uuid": results["PartitionKey"],
+        "ingest_status": results["Status"],
         "table_stream_name": stream_name,
         "start_datetime": results["StartDatetime"],
         "end_datetime": results["EndDatetime"],
@@ -1583,8 +1623,24 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
+    return_resposne = {
+        "query_uuid": results["query_uuid"],
+        "query_submit_status": results["query_submit_status"],
+        "query_processing_status": results["query_processing_status"],
+        "processing_percent_complete": results["processing_percent_complete"],
+        "processing_estimated_time_remaining_seconds": results[
+            "processing_estimated_time_remaining_seconds"
+        ],
+        "number_of_subqueries": results["number_of_subqueries"],
+        "number_of_subqueries_success": results["number_of_subqueries_success"],
+        "number_of_subqueries_failed": results["number_of_subqueries_failed"],
+        "query_total_row_count": results["query_total_row_count"],
+        "output_total_row_count": results["success_total_row_count"],
+        "output_total_file_size_GB": results["success_total_size_GB"],
+        "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
+    }
     return func.HttpResponse(
-        json.dumps(results), mimetype="application/json", status_code=200
+        json.dumps(return_resposne), mimetype="application/json", status_code=200
     )
 
 
