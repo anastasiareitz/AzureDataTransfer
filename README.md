@@ -182,6 +182,10 @@ The query will be split into chunks and then saved as messages in a storage queu
 
 ## Changelog
 
+1.3.1:
+- Fixed UTC timezone bug
+- Added estimated time remaining to get_status() response
+
 1.3.0:
 - Added pydantic input validation
 - Added Open API yaml file for Azure API Management
