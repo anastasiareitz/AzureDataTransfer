@@ -80,8 +80,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "log_analytics_data_collection_endpoint" : "https://XXXXXXXXXXXXXX-XXXXXXX.XXXXXX.ingest.monitor.azure.com",
     "log_analytics_data_collection_rule_id" : "dcr-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXXXXXX_CL",
-    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
-    "storage_table_ingest_name" : "XXXXXXXXXXX",
     "start_datetime" : "2024-03-26 00:00:00.000000",
     "timedelta_seconds" : 0.00036,
     "number_of_rows" : 1000000
@@ -116,13 +114,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "resource_group_name" : "XXXXXXXXXXXXXXXXXXXXXXX",
     "log_analytics_worksapce_name" : "XXXXXXXXXXXXXXXX",
     "log_analytics_workspace_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "storage_queue_url" : "https://XXXXXXXXXXXXXXXXXXX.queue.core.windows.net/",
-    "storage_queue_name" : "XXXXXXXXXXXXXX",
     "storage_blob_url" : "https://XXXXXXXXXXXXXXXXXXXXX.blob.core.windows.net/",
     "storage_blob_container_name" : "XXXXXXXXXXXXX",
-    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXXXXXX.table.core.windows.net/",
-    "storage_table_query_name" : "XXXXXXXXXXXXXX",
-    "storage_table_process_name" : "XXXXXXXXXXXXXX",
     "table_names_and_columns" : { "XXXXXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
     "start_datetime" : "2024-03-19 00:00:00",
     "end_datetime" : "2024-03-20 00:00:00"
@@ -154,10 +147,7 @@ The query will be split into chunks and then saved as messages in a storage queu
   
 ```json
 {
-    "query_uuid" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "storage_table_url" : "https://XXXXXXXXXXXXXXXXXX.table.core.windows.net/",
-    "storage_table_query_name" : "XXXXXXXXX",
-    "storage_table_process_name" : "XXXXXXXXXXXXX"
+    "query_uuid" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 }
 ```
 
@@ -174,8 +164,8 @@ The query will be split into chunks and then saved as messages in a storage queu
     "number_of_subqueries_success": 28,
     "number_of_subqueries_failed": 0,
     "query_total_row_count": 23000000,
-    "success_total_row_count": 6972002,
-    "success_total_size_GB": 2.05,
+    "output_total_row_count": 6972002,
+    "output_total_file_size_GB": 2.05,
     "runtime_since_submit_seconds": 463.6
 }
 ```
