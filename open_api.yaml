@@ -4,7 +4,7 @@ info:
   description: log-analytics-data-export-app Azure Function App APIs
   version: '1.0'
 servers:
-  - url: 'https://<AZURE_APIM_ENDPOINT>.azure-api.net/log-analytics-data-export-app'
+  - url: 'https://<ENDPOINT>.azure-api.net/log-analytics-data-export-app'
 paths:
   /azure_ingest_test_data:
     post:
@@ -25,6 +25,7 @@ paths:
               start_datetime: 'YYYY-MM-DD HH:MM:SS'
               timedelta_seconds: 0.001
               number_of_rows: 1
+              number_of_columns: 10
       responses:
         '200':
           description: OK
@@ -119,8 +120,6 @@ components:
         - log_analytics_data_collection_endpoint
         - log_analytics_data_collection_rule_id
         - log_analytics_data_collection_stream_name
-        - storage_table_url
-        - storage_table_ingest_name
         - start_datetime
         - timedelta_seconds
         - number_of_rows
@@ -142,6 +141,8 @@ components:
           type: number
         number_of_rows:
           type: integer
+        number_of_columns:
+          type: integer
       example:
         log_analytics_data_collection_endpoint: string
         log_analytics_data_collection_rule_id: string
@@ -151,12 +152,10 @@ components:
         start_datetime: 'YYYY-MM-DD HH:MM:SS'
         timedelta_seconds: 0.001
         number_of_rows: 1
+        number_of_columns: 10
     azure_get_query_status:
       required:
         - query_uuid
-        - storage_table_url
-        - storage_table_query_name
-        - storage_table_process_name
       type: object
       properties:
         query_uuid:
@@ -184,13 +183,8 @@ components:
         - resource_group_name
         - log_analytics_worksapce_name
         - log_analytics_workspace_id
-        - storage_queue_url
-        - storage_queue_name
         - storage_blob_url
         - storage_blob_container_name
-        - storage_table_url
-        - storage_table_query_name
-        - storage_table_process_name
         - table_names_and_columns
         - start_datetime
         - end_datetime
