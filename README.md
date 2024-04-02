@@ -189,6 +189,7 @@ The query will be split into chunks and then saved as messages in a storage queu
 1.3.1:
 - Fixed UTC timezone bug
 - Added estimated time remaining to get_status() response
+- Added option to put storage queue and table params in env variables
 
 1.3.0:
 - Added pydantic input validation
