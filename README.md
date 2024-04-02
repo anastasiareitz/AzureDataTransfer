@@ -49,7 +49,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 <b>Required Environment Varisables for Queue Trigger via Managed Identity</b>: 
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
-1. <b>QueueName</b> -> <QUEUE_NAME>
+1. <b>QueueName</b> -> <STORAGE_QUEUE_NAME>
 2. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 3. <b>storageAccountConnectionString__credential</b> -> managedidentity
 
