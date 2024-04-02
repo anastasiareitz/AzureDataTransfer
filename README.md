@@ -53,14 +53,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 2. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 3. <b>storageAccountConnectionString__credential</b> -> managedidentity
 
-<b>Optional Environment Variables (reduces number of params in requests)</b>:
-- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
-1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
-2. <b>TableURL</b> -> <STORAGE_TABLE_URL>
-3. <b>TableIngestName</b> -> <STORAGE_TABLE_INGEST_LOG_NAME>
-4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
-5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
-
 <b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
 1. Azure Portal -> Monitor -> Create Data Collection Endpoint
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
@@ -76,6 +68,14 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 <b>Queue Trigger Setup:</b>:
 - To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
+
+<b>Optional Environment Variables (reduces number of params in requests)</b>:
+- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
+1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
+2. <b>TableURL</b> -> <STORAGE_TABLE_URL>
+3. <b>TableIngestName</b> -> <STORAGE_TABLE_INGEST_LOG_NAME>
+4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
+5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
   
 ## Usage
 
