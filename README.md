@@ -92,8 +92,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ```json
 {
-    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "query_ingest_status": "Success",
+    "ingest_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "ingest_status": "Success",
     "table_stream_name": "Custom-XXXXXXXXXXXXXX_CL",
     "start_datetime": "2024-03-26 00:00:00.000000",
     "end_datetime": "2024-03-26 00:05:59.999640",
