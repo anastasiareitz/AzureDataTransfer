@@ -180,6 +180,12 @@ The query will be split into chunks and then saved as messages in a storage queu
 }
 ```
 
+## Issues
+
+1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
+   - Manually restart Azure Function App in Azure Portal
+   - Use Premium or Dedicated Plan   
+
 ## Changelog
 
 1.3.1:
