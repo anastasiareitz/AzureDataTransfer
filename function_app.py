@@ -258,7 +258,7 @@ def generate_and_ingest_test_data(
     unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
     # response and logging to table storage
     runtime = round(time.time() - time_start, 1)
-    time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
+    time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
     return_message = {
         "PartitionKey": ingest_uuid,
         "RowKey": unique_row_sha256_hash,
@@ -760,7 +760,7 @@ def query_log_analytics_send_to_queue(
     unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
     # response and logging to table storage
     runtime = round(time.time() - start_time, 1)
-    time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
+    time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
     return_message = {
         "PartitionKey": query_uuid,
         "RowKey": unique_row_sha256_hash,
@@ -1012,7 +1012,7 @@ def process_queue_message(
     unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
     # response and logging to storage table
     runtime_seconds = round(time.time() - start_time, 1)
-    time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
+    time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
     return_message = {
         "PartitionKey": query_uuid,
         "RowKey": unique_row_sha256_hash,
@@ -1313,14 +1313,14 @@ def get_status(
         processing_status = "Complete"
     else:
         processing_status = "Partial"
-    percent_commplete = (number_of_successful_subqueries / number_of_subqueries) * 100
-    percent_commplete = round(percent_commplete, 1)
+    percent_complete = (number_of_successful_subqueries / number_of_subqueries) * 100
+    percent_complete = round(percent_complete, 1)
     # response
     results = {
         "query_uuid": query_uuid,
         "query_submit_status": query_submit_status,
         "query_processing_status": processing_status,
-        "processing_percent_complete": float(percent_commplete),
+        "processing_percent_complete": float(percent_complete),
         "number_of_subqueries": int(number_of_subqueries),
         "number_of_subqueries_success": number_of_successful_subqueries,
         "number_of_subqueries_failed": number_of_failed_subqueries,
@@ -1337,8 +1337,20 @@ def get_status(
     else:
         divisor = 1_000_000
         results["success_total_size_MB"] = float(round(total_success_bytes / divisor, 3))
-    results["runtime_total_seconds"] = round(total_success_runtime_sec, 1)
     results["runtime_since_submit_seconds"] = round(time_since_query_seconds, 1)
+    # time remaining estimate
+    if processing_status == "Complete":
+        time_remaining_seconds = 0.0
+    else:
+        if number_of_successful_subqueries > 0:
+            percent_remaining = 100 - percent_complete
+            time_remaining_seconds = (
+                time_since_query_seconds * percent_remaining / percent_complete
+            )
+            time_remaining_seconds = float(round(time_remaining_seconds, 1))
+        else:
+            time_remaining_seconds = None
+    results["processing_estimated_time_remaining_seconds"] = time_remaining_seconds
     # failures
     if return_failures and failed_process_results_df.shape[0] > 0:
         export_cols = [
@@ -1451,17 +1463,17 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
-        "query_uuid" : results["PartitionKey"],
-        "query_ingest_status" : results["Status"],
-        "table_stream_name" : stream_name,
-        "start_datetime" : results["StartDatetime"],
-        "end_datetime" : results["EndDatetime"],
-        "number_of_columns" : results["NumberColumns"],
-        "rows_generated" : results["RowsGenerated"],
-        "rows_ingested" : results["RowsIngested"],
-        "valid_datetime_range" : results["ValidDatetimeRange"],
-        "runtime_seconds" : results["RuntimeSeconds"],
-        "query_ingest_datetime" : results["TimeGenerated"]
+        "query_uuid": results["PartitionKey"],
+        "query_ingest_status": results["Status"],
+        "table_stream_name": stream_name,
+        "start_datetime": results["StartDatetime"],
+        "end_datetime": results["EndDatetime"],
+        "number_of_columns": results["NumberColumns"],
+        "rows_generated": results["RowsGenerated"],
+        "rows_ingested": results["RowsIngested"],
+        "valid_datetime_range": results["ValidDatetimeRange"],
+        "runtime_seconds": results["RuntimeSeconds"],
+        "query_ingest_datetime": results["TimeGenerated"],
     }
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
@@ -1523,16 +1535,16 @@ def azure_submit_query(
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
-        "query_uuid" : results["PartitionKey"],
-        "query_submit_status" : results["Status"],
-        "table_names" : results["Tables"],
-        "start_datetime" : results["StartDatetime"],
-        "end_datetime" : results["EndDatetime"],
-        "total_row_count" : results["TotalRowCount"],
-        "subqueries_generated" : results["MessagesGenerated"],
-        "subqueries_sent_to_queue" : results["MessagesSentToQueue"],
-        "runtime_seconds" : results["RuntimeSeconds"],
-        "query_submit_datetime" : results["TimeGenerated"]
+        "query_uuid": results["PartitionKey"],
+        "query_submit_status": results["Status"],
+        "table_names": results["Tables"],
+        "start_datetime": results["StartDatetime"],
+        "end_datetime": results["EndDatetime"],
+        "total_row_count": results["TotalRowCount"],
+        "subqueries_generated": results["MessagesGenerated"],
+        "subqueries_sent_to_queue": results["MessagesSentToQueue"],
+        "runtime_seconds": results["RuntimeSeconds"],
+        "query_submit_datetime": results["TimeGenerated"],
     }
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
@@ -1640,7 +1652,7 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
         end_datetime = end_datetime.replace("T", " ").replace("Z", "")
         row_count = message["Count"]
         # logging to storage table
-        time_generated = pd.Timestamp.today().strftime("%Y-%m-%d %H:%M:%S.%f")
+        time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
         status = "Failed"
         # generate unique row key
         row_key = f"{query_uuid}__{status}__{table_name}__"
