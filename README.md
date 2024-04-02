@@ -71,7 +71,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
   
 ## Usage
 
-1. (Optional) Execute HTTP trigger <b>azure_ingest_test_data()</b> to generate test/fake data and ingest into Log Analytics. 
+<b>1. (Optional) Execute HTTP trigger <b>azure_ingest_test_data()</b> to generate test/fake data and ingest into Log Analytics:</b>
 
 - HTTP POST Request Body Example:
 
@@ -106,7 +106,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 }
 ```
 
-2. Execute HTTP trigger <b>azure_submit_query()</b> with query and connection parameters:
+<b>2. Execute HTTP trigger <b>azure_submit_query()</b> with query and connection parameters:</b>
 
 - HTTP POST Request Body Example:
   
@@ -148,7 +148,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 The query will be split into chunks and then saved as messages in a storage queue. Next, log_analytics_process_queue(), which is queue triggered, will automatically processes the messages in parallel and send the results to a storage account container. 
 
-3. Execute HTTP trigger <b>azure_get_query_status()</b> with query uuid and connection parameters:
+<b>3. Execute HTTP trigger <b>azure_get_query_status()</b> with query uuid and connection parameters:</b>
 
 - HTTP POST Request Body Example:
   
