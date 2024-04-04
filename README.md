@@ -186,7 +186,8 @@ The query will be split into chunks and then saved as messages in a storage queu
    - Use Premium or Dedicated Plan
 
 2. Submit Query function exceeds 10 min limit and fails
-   - Reduce the datetime range of the query
+   - Reduce the datetime range of the query (recommendation is less than 100M records at a time)
+   - Reduce break_up_query_freq value
    - Use Premium or Dedicated Plan with no time limit
 
 ## Changelog
