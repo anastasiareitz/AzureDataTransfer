@@ -146,7 +146,7 @@ def log_analytics_ingest(
         # return count of rows
         return fake_data_df.shape[0]
     except Exception as e:
-        logging.info("Error sending to log analytics, will skip: %s", e)
+        logging.error("Error sending to log analytics, will skip: %s", e)
         return 0
 
 
@@ -206,8 +206,8 @@ def generate_and_ingest_test_data(
     check_start_range = current_datetime - pd.to_timedelta("2D")
     check_end_range = current_datetime + pd.to_timedelta("1D")
     if not check_start_range <= given_timestamp <= check_end_range:
-        logging.info("Warning: Date given is outside allowed ingestion range")
-        logging.info("Note: Log Analytics will use ingest time as TimeGenerated")
+        logging.warning("Warning: Date given is outside allowed ingestion range")
+        logging.warning("Note: Log Analytics will use ingest time as TimeGenerated")
         valid_ingest_datetime_range = False
     else:
         valid_ingest_datetime_range = True
@@ -242,7 +242,7 @@ def generate_and_ingest_test_data(
                 number_of_columns,
             )
         except Exception as e:
-            logging.info("Unable to generate test data: %s", e)
+            logging.error("Unable to generate test data: %s", e)
             continue
         # send to log analytics
         logging.info("Sending to Log Analytics...")
@@ -806,7 +806,7 @@ def send_message_to_queue(
         queue_client.send_message(json.dumps(message))
         return "Success"
     except Exception as e:
-        logging.info(
+        logging.error(
             "Error: Unable to send message to queue, skipped: %s, exception: %s",
             message,
             e,
@@ -829,7 +829,7 @@ def get_message_from_queue(
         )
         return queue_message
     except Exception as e:
-        logging.info("Request Error: Unable to Get Queue Message, %s", e)
+        logging.error("Request Error: Unable to Get Queue Message, %s", e)
         raise Exception("Request Error: Unable to Get Queue Message") from e
     finally:
         time.sleep(request_wait_seconds)
@@ -842,7 +842,7 @@ def delete_message_from_queue(
         queue_client.delete_message(queue_message)
         logging.info("Successfully Deleted Message from Queue")
     except Exception as e:
-        logging.info("Unable to delete message, %s, %s", queue_message, e)
+        logging.error("Unable to delete message, %s, %s", queue_message, e)
         raise Exception(f"Unable to delete message, {queue_message}") from e
 
 
@@ -853,7 +853,7 @@ def check_if_queue_empty_peek_message(queue_client: QueueClient) -> bool:
             return True
         return False
     except Exception as e:
-        logging.info("Unable to peek at queue messages, %s", e)
+        logging.error("Unable to peek at queue messages, %s", e)
         return False
 
 
@@ -877,7 +877,7 @@ def message_validation_check(message: dict) -> None:
         "Count",
     ]
     if not all(each_field in message for each_field in required_fields):
-        logging.info("Invalid message, required fields missing: %s", message)
+        logging.error("Invalid message, required fields missing: %s", message)
         raise Exception(f"Invalid message, required fields missing: {message}")
 
 
@@ -984,7 +984,7 @@ def process_queue_message(
     logging.info("Successfully Downloaded from Log Analytics: %s", query_results_df.shape)
     # confirm count matches
     if query_results_df.shape[0] != message["Count"]:
-        logging.info("Row count doesn't match expected value, %s", message)
+        logging.error("Row count doesn't match expected value, %s", message)
         raise Exception(f"Row count doesn't match expected value, {message}")
     # storage blob connection
     # note: need to add Storage Blob Data Contributor role
@@ -1104,7 +1104,7 @@ def process_queue_messages_loop(
                     runtime_calculation = round(time.time() - each_start_time, 1)
                     logging.info("Runtime: %s", runtime_calculation)
                 except Exception as e:
-                    logging.info(
+                    logging.error(
                         "Unable to process message: %s %s", queue_message.content, e
                     )
                     failed_messages += 1
@@ -1122,7 +1122,7 @@ def process_queue_messages_loop(
                     break
     # stop processing by keyboard interrupt
     except KeyboardInterrupt:
-        logging.info("Run was canceled manually by user")
+        logging.warning("Run was canceled manually by user")
     # return results
     finally:
         get_queue_properties = queue_client.get_queue_properties()
@@ -1171,7 +1171,7 @@ def upload_file_to_storage(
         logging.info("File Size: %s MBs", file_size_calculation_mb)
         return uploaded_file_size
     except Exception as e:
-        logging.info("Unable to upload, %s, %s", filename, e)
+        logging.error("Unable to upload, %s, %s", filename, e)
         raise Exception(f"Unable to upload, {filename}") from e
 
 
@@ -1256,7 +1256,9 @@ def get_and_process_table_results(
     if query_results_df_raw.shape[0] == 0:
         raise Exception("Query UUID not found in query logs")
     if query_results_df_raw.shape[0] > 1:
-        logging.info("Warning: Found more than 1 row with same Query UUID in query logs")
+        logging.warning(
+            "Warning: Found more than 1 row with same Query UUID in query logs"
+        )
     query_results_df = query_results_df_raw.rename(columns=cols_to_rename)
     # process results
     process_results_df_raw = pd.DataFrame(process_results)
@@ -1561,6 +1563,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
     try:
         validated_inputs = IngestHttpRequest.model_validate(request_body)
     except Exception as e:
+        logging.error("Invalid Inputs, Exception: %s", e)
         return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract fields
     endpoint = validated_inputs.log_analytics_data_collection_endpoint
@@ -1590,6 +1593,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         )
         logging.info("Success: %s", results)
     except Exception as e:
+        logging.error("Failed: %s", e)
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
@@ -1621,6 +1625,7 @@ def azure_submit_query(
     try:
         validated_inputs = SubmitQueryHttpRequest.model_validate(request_body)
     except Exception as e:
+        logging.error("Invalid Inputs, Exception: %s", e)
         return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract fields
     query_uuid = validated_inputs.query_uuid
@@ -1668,6 +1673,7 @@ def azure_submit_query(
         )
         logging.info("Success: %s", results)
     except Exception as e:
+        logging.error("Failed: %s", e)
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
@@ -1696,6 +1702,7 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
     try:
         validated_inputs = GetQueryStatusHttpRequest.model_validate(request_body)
     except Exception as e:
+        logging.error("Invalid Inputs, Exception: %s", e)
         return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract fields
     query_uuid = validated_inputs.query_uuid
@@ -1717,6 +1724,7 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
         )
         logging.info("Success: %s", results)
     except Exception as e:
+        logging.error("Failed: %s", e)
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
     return_resposne = {
@@ -1774,7 +1782,8 @@ def azure_process_queue(msg: func.QueueMessage) -> None:
         time_calculation = round(time.time() - start_time, 1)
         logging.info("Success, Runtime: %s seconds", time_calculation)
     except Exception as e:
-        raise Exception("Failed to process queue message") from e
+        logging.error("Failed to process queue message: %s %s", message_content, e)
+        raise Exception(f"Failed to process queue message: {message_content}") from e
 
 
 @app.queue_trigger(
@@ -1830,5 +1839,5 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
         logging.info("Success, Runtime: %s seconds", runtime_calculation)
     except Exception as e:
         message_body_decoded = msg.get_body().decode("utf-8")
-        logging.info("Invalid message: %s", message_body_decoded)
+        logging.error("Invalid message: %s", message_body_decoded)
         raise Exception("Failed, Invalid message") from e
