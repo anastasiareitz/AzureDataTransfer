@@ -1723,9 +1723,9 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
         "query_uuid": results["query_uuid"],
         "query_submit_status": results["query_submit_status"],
         "query_processing_status": results["query_processing_status"],
-        "processing_percent_complete": results["processing_percent_complete"],
+        "percent_complete": results["processing_percent_complete"],
         "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
-        "processing_estimated_time_remaining_seconds": results[
+        "estimated_time_remaining_seconds": results[
             "processing_estimated_time_remaining_seconds"
         ],
         "number_of_subqueries": results["number_of_subqueries"],
