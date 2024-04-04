@@ -1,4 +1,5 @@
 import hashlib
+import importlib.util
 import json
 import logging
 import math
@@ -10,16 +11,21 @@ import uuid
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 
-import pandas as pd
-import pyarrow
 import azure.functions as func
+import pandas as pd
+from azure.data.tables import TableClient, UpdateMode
 from azure.identity import DefaultAzureCredential
 from azure.monitor.ingestion import LogsIngestionClient
 from azure.monitor.query import LogsQueryClient, LogsQueryStatus
 from azure.storage.blob import ContainerClient
 from azure.storage.queue import QueueClient, QueueMessage
-from azure.data.tables import TableClient, UpdateMode
 from pydantic import BaseModel, Field
+
+# pyarrow required for pandas parquet output
+check_packages_installed = ["pyarrow"]
+for each_package in check_packages_installed:
+    if not importlib.util.find_spec(each_package):
+        raise Exception(f"Failed to import package: {each_package}")
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -115,10 +121,13 @@ def generate_test_data(
     time_generated = fake_data_df["TimeGenerated"].dt.strftime("%Y-%m-%d %H:%M:%S.%f")
     fake_data_df["TimeGenerated"] = time_generated
     # status
-    logging.info(f"Data Shape: {fake_data_df.shape}")
-    logging.info(f"Size: {fake_data_df.memory_usage().sum() / 1_000_000} MBs")
-    logging.info(f"First Datetime: {fake_data_df['TimeGenerated'].iloc[0]}")
-    logging.info(f"Last Datetime: {fake_data_df['TimeGenerated'].iloc[-1]}")
+    logging.info("Data Shape: %s", fake_data_df.shape)
+    size_calculation = fake_data_df.memory_usage().sum() / 1_000_000
+    logging.info("Size: %s MBs", size_calculation)
+    get_first_datetime = fake_data_df["TimeGenerated"].iloc[0]
+    get_last_datetime = fake_data_df["TimeGenerated"].iloc[-1]
+    logging.info("First Datetime: %s", get_first_datetime)
+    logging.info("Last Datetime: %s", get_last_datetime)
     return fake_data_df
 
 
@@ -137,7 +146,7 @@ def log_analytics_ingest(
         # return count of rows
         return fake_data_df.shape[0]
     except Exception as e:
-        logging.info(f"Error sending to log analytics, will skip: {e}")
+        logging.info("Error sending to log analytics, will skip: %s", e)
         return 0
 
 
@@ -196,7 +205,7 @@ def generate_and_ingest_test_data(
     current_datetime = pd.to_datetime("today")
     check_start_range = current_datetime - pd.to_timedelta("2D")
     check_end_range = current_datetime + pd.to_timedelta("1D")
-    if not (check_start_range <= given_timestamp <= check_end_range):
+    if not check_start_range <= given_timestamp <= check_end_range:
         logging.info("Warning: Date given is outside allowed ingestion range")
         logging.info("Note: Log Analytics will use ingest time as TimeGenerated")
         valid_ingest_datetime_range = False
@@ -224,9 +233,7 @@ def generate_and_ingest_test_data(
         each_start_datetime = each_row.start_datetime
         each_number_of_rows = each_row.number_of_rows
         # generate fake data
-        logging.info(
-            f"Generating Test Data Request {each_index} of {number_of_ingests}..."
-        )
+        logging.info("Generating Request %s of %s...", each_index, number_of_ingests)
         try:
             each_fake_data_df = generate_test_data(
                 each_start_datetime,
@@ -235,7 +242,7 @@ def generate_and_ingest_test_data(
                 number_of_columns,
             )
         except Exception as e:
-            logging.info(f"Unable to generate test data: {e}")
+            logging.info("Unable to generate test data: %s", e)
             continue
         # send to log analytics
         logging.info("Sending to Log Analytics...")
@@ -246,9 +253,8 @@ def generate_and_ingest_test_data(
             stream_name,
         )
         successfull_rows_sent += each_rows_ingested
-        logging.info(
-            f"Runtime: {round(time.time() - each_request_start_time, 1)} seconds"
-        )
+        runtime_calculation = round(time.time() - each_request_start_time, 1)
+        logging.info("Runtime: %s seconds", runtime_calculation)
     # status check
     if successfull_rows_sent == 0:
         status = "Failed"
@@ -327,7 +333,7 @@ def query_log_analytics_request(
                 f"Unsuccessful Request, Response Status: {response.status} {response}"
             )
     except Exception as e:
-        raise Exception(f"Failed Log Analytics Request, Exception: {e}")
+        raise Exception("Failed Log Analytics Request") from e
     finally:
         time.sleep(request_wait_seconds)
 
@@ -358,7 +364,7 @@ def query_log_analytics_get_table_columns(
             output[each_table] = each_columns_fix
         # if no column names provided, query log analytics for all column names
         else:
-            logging.info(f"Getting columns names for {each_table}")
+            logging.info("Getting columns names for %s", each_table)
             each_kql_query = f"""
             let TABLE_NAME = "{each_table}";
             table(TABLE_NAME)
@@ -371,7 +377,7 @@ def query_log_analytics_get_table_columns(
             each_columns_fix = list(each_df.columns)
             each_columns_fix.remove("TimeGenerated")
             each_columns_fix = ["TimeGenerated"] + each_columns_fix
-            logging.info(f"Columns Detected: {each_columns_fix}")
+            logging.info("Columns Detected: %s", each_columns_fix)
             output[each_table] = each_columns_fix
     if len(output) == 0:
         raise Exception("No valid table names")
@@ -441,7 +447,7 @@ def query_log_analytics_get_time_ranges(
     | extend StartTime = tostring(StartTime), EndTime = tostring(EndTime);
     time_pairs
     """
-    logging.info(f"Splitting {table_name}: {start_datetime}-{end_datetime}")
+    logging.info("Splitting %s: %s-%s", table_name, start_datetime, end_datetime)
     # query log analytics and get time ranges
     df = query_log_analytics_request(workspace_id, log_client, kql_query)
     # no results
@@ -452,9 +458,8 @@ def query_log_analytics_get_time_ranges(
     df_copy = df.copy()
     final_endtime = df_copy["EndTime"].tail(1).item()
     new_final_endtime = str(pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s"))
-    new_final_endtime_fix_format = new_final_endtime.replace(" ", "T").replace(
-        "00+00:00", "Z"
-    )
+    new_final_endtime_fix_format = new_final_endtime.replace(" ", "T")
+    new_final_endtime_fix_format = new_final_endtime_fix_format.replace("00+00:00", "Z")
     df_copy.loc[df_copy.index[-1], "EndTime"] = new_final_endtime_fix_format
     return df_copy
 
@@ -674,14 +679,14 @@ def query_log_analytics_send_to_queue(
         pd.to_datetime(start_datetime)
         pd.to_datetime(end_datetime)
     except Exception as e:
-        raise Exception(f"Invalid Datetime Format, Exception {e}")
+        raise Exception("Invalid Datetime Format") from e
     if storage_blob_output_format not in ["JSONL", "CSV", "PARQUET"]:
         raise Exception(f"Invalid Output file format: {storage_blob_output_format}")
     # status message
     logging.info("Processing Query...")
     table_names_join = ", ".join(table_names_and_columns.keys())
-    logging.info(f"Tables: {table_names_join}")
-    logging.info(f"Date Range: {start_datetime}-{end_datetime}")
+    logging.info("Tables: %s", table_names_join)
+    logging.info("Date Range: %s-%s", start_datetime, end_datetime)
     # log analytics connection
     # note: need to add Log Analytics Contributor role
     log_client = LogsQueryClient(credential)
@@ -705,7 +710,7 @@ def query_log_analytics_send_to_queue(
             workspace_id, log_client, each_table_name, start_datetime, end_datetime
         )
         total_query_results_count_expected += each_count
-    logging.info(f"Total Row Count: {total_query_results_count_expected}")
+    logging.info("Total Row Count: %s", total_query_results_count_expected)
     # break up queries by table and date ranges
     table_names = list(table_names_and_columns.keys())
     df_queries = break_up_initial_query_time_freq(
@@ -721,9 +726,9 @@ def query_log_analytics_send_to_queue(
     )
     # confirm count of split queries
     total_query_results_count = query_results_df["Count"].sum()
-    logging.info(f"Split Queries Total Row Count: {total_query_results_count}")
+    logging.info("Split Queries Total Row Count: %s", total_query_results_count)
     if total_query_results_count != total_query_results_count_expected:
-        raise Exception(f"Error: Row Count Mismatch")
+        raise Exception("Error: Row Count Mismatch")
     if not query_results_df.empty:
         # process results, add columns, and convert to list of dicts
         results = process_query_results_df(
@@ -743,13 +748,15 @@ def query_log_analytics_send_to_queue(
         number_of_results = len(results)
         # send to queue
         successful_sends = 0
-        logging.info(f"Initial Queue Status: {queue_client.get_queue_properties()}")
+        get_queue_properties = queue_client.get_queue_properties()
+        logging.info("Initial Queue Status: %s", get_queue_properties)
         for each_msg in results:
             each_result = send_message_to_queue(queue_client, each_msg)
             if each_result == "Success":
                 successful_sends += 1
-        logging.info(f"Messages Successfully Sent to Queue: {successful_sends}")
-        logging.info(f"Updated Queue Status: {queue_client.get_queue_properties()}")
+        logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
+        get_queue_properties = queue_client.get_queue_properties()
+        logging.info("Updated Queue Status: %s", get_queue_properties)
         if successful_sends == number_of_results:
             status = "Success"
         else:
@@ -760,7 +767,8 @@ def query_log_analytics_send_to_queue(
         number_of_results = 0
         successful_sends = 0
         logging.info("Error: No Query Messages Generated")
-        logging.info(f"Updated Queue Status: {queue_client.get_queue_properties()}")
+        get_queue_properties = queue_client.get_queue_properties()
+        logging.info("Updated Queue Status: %s", get_queue_properties)
     # create hash for RowKey
     row_key = f"{query_uuid}__{status}__{table_names_join}__"
     row_key += f"{start_datetime}__{end_datetime}__"
@@ -799,7 +807,9 @@ def send_message_to_queue(
         return "Success"
     except Exception as e:
         logging.info(
-            f"Error: Unable to send message to queue, skipped: {message}, exception: {e}"
+            "Error: Unable to send message to queue, skipped: %s, exception: %s",
+            message,
+            e,
         )
         return "Failed"
     finally:
@@ -819,8 +829,8 @@ def get_message_from_queue(
         )
         return queue_message
     except Exception as e:
-        logging.info(f"Request Error: Unable to Get Queue Message, {e}")
-        raise Exception(f"Request Error: Unable to Get Queue Message, {e}")
+        logging.info("Request Error: Unable to Get Queue Message, %s", e)
+        raise Exception("Request Error: Unable to Get Queue Message") from e
     finally:
         time.sleep(request_wait_seconds)
 
@@ -830,10 +840,10 @@ def delete_message_from_queue(
 ) -> None:
     try:
         queue_client.delete_message(queue_message)
-        logging.info(f"Successfully Deleted Message from Queue")
+        logging.info("Successfully Deleted Message from Queue")
     except Exception as e:
-        logging.info(f"Unable to delete message, {queue_message}, {e}")
-        raise Exception(f"Unable to delete message, {queue_message}, {e}")
+        logging.info("Unable to delete message, %s, %s", queue_message, e)
+        raise Exception(f"Unable to delete message, {queue_message}") from e
 
 
 def check_if_queue_empty_peek_message(queue_client: QueueClient) -> bool:
@@ -843,7 +853,7 @@ def check_if_queue_empty_peek_message(queue_client: QueueClient) -> bool:
             return True
         return False
     except Exception as e:
-        logging.info(f"Unable to peek at queue messages, {e}")
+        logging.info("Unable to peek at queue messages, %s", e)
         return False
 
 
@@ -867,7 +877,7 @@ def message_validation_check(message: dict) -> None:
         "Count",
     ]
     if not all(each_field in message for each_field in required_fields):
-        logging.info(f"Invalid message, required fields missing: {message}")
+        logging.info("Invalid message, required fields missing: %s", message)
         raise Exception(f"Invalid message, required fields missing: {message}")
 
 
@@ -894,9 +904,9 @@ def query_log_analytics_get_query_results(
     return df
 
 
-def datetime_to_filename_safe(input: str) -> str:
+def datetime_to_filename_safe(user_input: str) -> str:
     # remove characters from timestamp to be filename safe/readable
-    output = input.replace("-", "").replace(":", "").replace(".", "")
+    output = user_input.replace("-", "").replace(":", "").replace(".", "")
     output = output.replace("T", "").replace("Z", "")
     output = output.replace(" ", "")
     return output
@@ -922,10 +932,10 @@ def generate_output_filename_base(
     # mimics continuous export from log analytics
     # https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-data-export
     output_filename = f"{table_name}/"
-    output_filename += f"WorkspaceResourceId=/"
+    output_filename += "WorkspaceResourceId=/"
     output_filename += f"subscriptions/{subscription}/"
     output_filename += f"resourcegroups/{resource_group}/"
-    output_filename += f"providers/microsoft.operationalinsights/"
+    output_filename += "providers/microsoft.operationalinsights/"
     output_filename += f"workspaces/{log_analytics_name}/"
     output_filename += f"y={extract_year}/m={extract_month}/d={extract_day}/"
     output_filename += f"h={extract_hour}/"
@@ -968,13 +978,13 @@ def process_queue_message(
     start_time = time.time()
     # validate message
     message_validation_check(message)
-    logging.info(f"Processing Message: {message}")
+    logging.info("Processing Message: %s", message)
     # query log analytics
     query_results_df = query_log_analytics_get_query_results(log_client, message)
-    logging.info(f"Successfully Downloaded from Log Analytics: {query_results_df.shape}")
+    logging.info("Successfully Downloaded from Log Analytics: %s", query_results_df.shape)
     # confirm count matches
     if query_results_df.shape[0] != message["Count"]:
-        logging.info(f"Row count doesn't match expected value, {message}")
+        logging.info("Row count doesn't match expected value, %s", message)
         raise Exception(f"Row count doesn't match expected value, {message}")
     # storage blob connection
     # note: need to add Storage Blob Data Contributor role
@@ -1059,7 +1069,7 @@ def process_queue_messages_loop(
     Returns:
         dict of results summary
     """
-    logging.info(f"Processing Queue Messages, press CTRL+C or interupt kernel to stop...")
+    logging.info("Processing Queue Messages, press CTRL+C or interupt kernel to stop...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1075,7 +1085,8 @@ def process_queue_messages_loop(
         # loop through all messages in queue
         while True:
             # queue status
-            logging.info(f"Queue Status: {queue_client.get_queue_properties()}")
+            get_queue_properties = queue_client.get_queue_properties()
+            logging.info("Queue Status: %s", get_queue_properties)
             # get message
             each_start_time = time.time()
             queue_message = get_message_from_queue(
@@ -1090,35 +1101,39 @@ def process_queue_messages_loop(
                     # remove message from queue if successful
                     delete_message_from_queue(queue_client, queue_message)
                     successful_messages += 1
-                    logging.info(f"Runtime: {round(time.time() - each_start_time, 1)}")
+                    runtime_calculation = round(time.time() - each_start_time, 1)
+                    logging.info("Runtime: %s", runtime_calculation)
                 except Exception as e:
                     logging.info(
-                        f"Unable to process message: {queue_message.content} {e}"
+                        "Unable to process message: %s %s", queue_message.content, e
                     )
                     failed_messages += 1
                     continue
             # queue empty
             else:
                 logging.info(
-                    f"Waiting for message visibility timeout ({message_visibility_timeout_seconds} seconds)..."
+                    "Waiting for message visibility timeout (%s seconds)...",
+                    message_visibility_timeout_seconds,
                 )
                 time.sleep(message_visibility_timeout_seconds + 60)
                 # check if queue still empty
                 if check_if_queue_empty_peek_message(queue_client):
-                    logging.info(f"No messages in queue")
+                    logging.info("No messages in queue")
                     break
     # stop processing by keyboard interrupt
     except KeyboardInterrupt:
-        logging.info(f"Run was cancelled manually by user")
+        logging.info("Run was canceled manually by user")
     # return results
     finally:
-        logging.info(f"Queue Status: {queue_client.get_queue_properties()}")
-        logging.info(f"Processing queue messages complete")
-        return {
+        get_queue_properties = queue_client.get_queue_properties()
+        logging.info("Queue Status: %s", get_queue_properties)
+        logging.info("Processing queue messages complete")
+        return_result = {
             "successful_messages": successful_messages,
             "failed_messages": failed_messages,
             "runtime_seconds": round(time.time() - start_time, 1),
         }
+        return return_result  # pylint: disable=return-in-finally disable=lost-exception
 
 
 # -----------------------------------------------------------------------------
@@ -1136,7 +1151,7 @@ def upload_file_to_storage(
     # ref: https://stackoverflow.com/questions/65092741/solve-timeout-errors-on-file-uploads-with-new-azure-storage-blob-package
     try:
         blob_client = container_client.get_blob_client(filename)
-        blob_client_output = blob_client.upload_blob(
+        blob_client.upload_blob(
             data=data,
             connection_timeout=azure_storage_connection_timeout_fix_seconds,
             overwrite=True,
@@ -1144,16 +1159,20 @@ def upload_file_to_storage(
         storage_account_name = container_client.account_name
         container_name = container_client.container_name
         logging.info(
-            f"Successfully Uploaded {storage_account_name}:{container_name}/{filename}"
+            "Successfully Uploaded %s:%s/%s",
+            storage_account_name,
+            container_name,
+            filename,
         )
         # file size
         uploaded_file_metadata = list(container_client.list_blobs(filename))[0]
         uploaded_file_size = uploaded_file_metadata.size
-        logging.info(f"File Size: {uploaded_file_size / 1_000_000} MB")
+        file_size_calculation_mb = uploaded_file_size / 1_000_000
+        logging.info("File Size: %s MBs", file_size_calculation_mb)
         return uploaded_file_size
     except Exception as e:
-        logging.info(f"Unable to upload, {filename}, {e}")
-        raise Exception(f"Unable to upload, {filename}, {e}")
+        logging.info("Unable to upload, %s, %s", filename, e)
+        raise Exception(f"Unable to upload, {filename}") from e
 
 
 def download_blob(
@@ -1199,9 +1218,9 @@ def list_blobs_df(
     results = []
     for each_file in container_client.list_blobs():
         each_name = each_file.name
-        each_size_MB = each_file.size / 1_000_000
+        each_size_mb = each_file.size / 1_000_000
         each_date = each_file.creation_time
-        results.append([each_name, each_size_MB, each_date])
+        results.append([each_name, each_size_mb, each_date])
     # convert to dataframe
     df = pd.DataFrame(results, columns=["filename", "file_size_mb", "creation_time"])
     df = df.sort_values("creation_time", ascending=False)
@@ -1211,6 +1230,130 @@ def list_blobs_df(
 # -----------------------------------------------------------------------------
 # storage table
 # -----------------------------------------------------------------------------
+
+
+def get_and_process_table_results(
+    credential: DefaultAzureCredential,
+    storage_table_url: str,
+    storage_table_query_name: str,
+    storage_table_process_name: str,
+    query_uuid: str,
+) -> dict[str, pd.DataFrame]:
+    # table connections
+    table_client_query = TableClient(
+        storage_table_url, storage_table_query_name, credential=credential
+    )
+    table_client_process = TableClient(
+        storage_table_url, storage_table_process_name, credential=credential
+    )
+    # get results from azure storage tables
+    search_odata_string = f"PartitionKey eq '{query_uuid}'"
+    query_results = table_client_query.query_entities(search_odata_string)
+    process_results = table_client_process.query_entities(search_odata_string)
+    # query results
+    cols_to_rename = {"PartitionKey": "QueryUUID"}
+    query_results_df_raw = pd.DataFrame(query_results)
+    if query_results_df_raw.shape[0] == 0:
+        raise Exception("Query UUID not found in query logs")
+    if query_results_df_raw.shape[0] > 1:
+        logging.info("Warning: Found more than 1 row with same Query UUID in query logs")
+    query_results_df = query_results_df_raw.rename(columns=cols_to_rename)
+    # process results
+    process_results_df_raw = pd.DataFrame(process_results)
+    if process_results_df_raw.shape[0] == 0:
+        raise Exception("Query UUID not found in process logs")
+    process_results_df = process_results_df_raw.rename(columns=cols_to_rename)
+    # split
+    success_mask = process_results_df.Status == "Success"
+    success_process_results_df = process_results_df.loc[success_mask]
+    failed_mask = process_results_df.Status == "Failed"
+    failed_process_results_df = process_results_df.loc[failed_mask]
+    # return results
+    return_dfs = {
+        "query_results_df": query_results_df,
+        "process_results_df": process_results_df,
+        "success_process_results_df": success_process_results_df,
+        "failed_process_results_df": failed_process_results_df,
+    }
+    return return_dfs
+
+
+def calculate_runtime_since_query_submit(
+    query_results_df: pd.DataFrame, process_results_df: pd.DataFrame
+) -> int:
+    # change column types to datetime
+    query_results_df_copy = query_results_df.copy()
+    query_results_df_copy["TimeGenerated"] = pd.to_datetime(
+        query_results_df.TimeGenerated
+    )
+    process_results_df_copy = process_results_df.copy()
+    process_results_df_copy["TimeGenerated"] = pd.to_datetime(
+        process_results_df_copy.TimeGenerated
+    )
+    # calcualte difference between first submit and last processed log
+    query_submit_datetime = query_results_df_copy["TimeGenerated"].min()
+    last_processing_datetime = process_results_df_copy["TimeGenerated"].max()
+    time_since_query = last_processing_datetime - query_submit_datetime
+    time_since_query_seconds = time_since_query.total_seconds()
+    return time_since_query_seconds
+
+
+def calculate_processing_status_and_percent(
+    number_of_successful_subqueries: int,
+    number_of_subqueries: int,
+    total_success_row_count: int,
+    query_total_row_count: int,
+) -> tuple[str, float]:
+    if (
+        number_of_successful_subqueries == number_of_subqueries
+        and total_success_row_count == query_total_row_count
+    ):
+        processing_status = "Complete"
+    else:
+        processing_status = "Partial"
+    percent_complete = (number_of_successful_subqueries / number_of_subqueries) * 100
+    percent_complete = round(percent_complete, 1)
+    return processing_status, percent_complete
+
+
+def calculate_file_size(
+    filesize_units: str,
+    total_success_bytes: int,
+) -> tuple[float, str]:
+    if filesize_units == "GB":
+        divisor = 1_000_000_000
+        success_total_size = float(round(total_success_bytes / divisor, 3))
+        file_units = "GB"
+    elif filesize_units == "TB":
+        divisor = 1_000_000_000_000
+        success_total_size = float(round(total_success_bytes / divisor, 3))
+        file_units = "TB"
+    # defaults to MB
+    else:
+        divisor = 1_000_000
+        success_total_size = float(round(total_success_bytes / divisor, 3))
+        file_units = "MB"
+    return success_total_size, file_units
+
+
+def calculate_time_remaining_estimate(
+    processing_status: str,
+    number_of_successful_subqueries: int,
+    percent_complete: float,
+    time_since_query_seconds: int,
+) -> float | None:
+    if processing_status == "Complete":
+        time_remaining_seconds = 0.0
+    else:
+        if number_of_successful_subqueries > 0:
+            percent_remaining = 100 - percent_complete
+            time_remaining_seconds = (
+                time_since_query_seconds * percent_remaining / percent_complete
+            )
+            time_remaining_seconds = float(round(time_remaining_seconds, 1))
+        else:
+            time_remaining_seconds = None
+    return time_remaining_seconds
 
 
 def get_status(
@@ -1236,61 +1379,18 @@ def get_status(
     Returns:
         dict with high-level status properties
     """
-    # table connections
-    table_client_query = TableClient(
-        storage_table_url, storage_table_query_name, credential=credential
+    # get table logs dataframes
+    table_dfs = get_and_process_table_results(
+        credential,
+        storage_table_url,
+        storage_table_query_name,
+        storage_table_process_name,
+        query_uuid,
     )
-    table_client_process = TableClient(
-        storage_table_url, storage_table_process_name, credential=credential
-    )
-    # get results from azure storage tables
-    search_odata_string = f"PartitionKey eq '{query_uuid}'"
-    query_results = table_client_query.query_entities(search_odata_string)
-    process_results = table_client_process.query_entities(search_odata_string)
-    # convert to dataframes
-    query_results_df = pd.DataFrame(query_results)
-    if query_results_df.shape[0] == 0:
-        raise Exception("Query UUID not found in query logs")
-    elif query_results_df.shape[0] > 1:
-        logging.info(f"Warning: Found more than 1 row with same Query UUID in query logs")
-    query_results_df = query_results_df.rename(columns={"PartitionKey": "QueryUUID"})[
-        [
-            "QueryUUID",
-            "TimeGenerated",
-            "Status",
-            "Tables",
-            "StartDatetime",
-            "EndDatetime",
-            "MessagesSentToQueue",
-            "TotalRowCount",
-            "RuntimeSeconds",
-        ]
-    ]
-    process_results_df = pd.DataFrame(process_results)
-    if process_results_df.shape[0] == 0:
-        raise Exception("Query UUID not found in process logs")
-    process_results_df = process_results_df.rename(columns={"PartitionKey": "QueryUUID"})[
-        [
-            "QueryUUID",
-            "TimeGenerated",
-            "Status",
-            "SubQuery",
-            "Table",
-            "StartDatetime",
-            "EndDatetime",
-            "RowCount",
-            "Filename",
-            "FileSizeBytes",
-            "RuntimeSeconds",
-        ]
-    ]
-    # split data
-    success_process_results_df = process_results_df[
-        process_results_df["Status"] == "Success"
-    ]
-    failed_process_results_df = process_results_df[
-        process_results_df["Status"] == "Failed"
-    ]
+    query_results_df = table_dfs["query_results_df"]
+    process_results_df = table_dfs["process_results_df"]
+    success_process_results_df = table_dfs["success_process_results_df"]
+    failed_process_results_df = table_dfs["failed_process_results_df"]
     # summarize results
     query_submit_status = ", ".join(query_results_df.Status)
     query_total_row_count = query_results_df.TotalRowCount.sum()
@@ -1299,31 +1399,24 @@ def get_status(
     number_of_failed_subqueries = failed_process_results_df.shape[0]
     total_success_bytes = success_process_results_df.FileSizeBytes.sum()
     total_success_row_count = success_process_results_df.RowCount.sum()
-    total_success_runtime_sec = success_process_results_df.RuntimeSeconds.sum()
-    # time since query submit
-    query_results_df_copy = query_results_df.copy()
-    query_results_df_copy["TimeGenerated"] = pd.to_datetime(
-        query_results_df.TimeGenerated
+    time_since_query_seconds = calculate_runtime_since_query_submit(
+        query_results_df, process_results_df
     )
-    process_results_df_copy = process_results_df.copy()
-    process_results_df_copy["TimeGenerated"] = pd.to_datetime(
-        process_results_df_copy.TimeGenerated
+    processing_status, percent_complete = calculate_processing_status_and_percent(
+        number_of_successful_subqueries,
+        number_of_subqueries,
+        total_success_row_count,
+        query_total_row_count,
     )
-    query_submit_datetime = query_results_df_copy["TimeGenerated"].min()
-    last_processing_datetime = process_results_df_copy["TimeGenerated"].max()
-    time_since_query = last_processing_datetime - query_submit_datetime
-    time_since_query_seconds = time_since_query.total_seconds()
-    # processing status
-    if (
-        number_of_successful_subqueries == number_of_subqueries
-        and total_success_row_count == query_total_row_count
-    ):
-        processing_status = "Complete"
-    else:
-        processing_status = "Partial"
-    percent_complete = (number_of_successful_subqueries / number_of_subqueries) * 100
-    percent_complete = round(percent_complete, 1)
-    # response
+    success_total_size, file_units = calculate_file_size(
+        filesize_units, total_success_bytes
+    )
+    time_remaining_seconds = calculate_time_remaining_estimate(
+        processing_status,
+        number_of_successful_subqueries,
+        percent_complete,
+        time_since_query_seconds,
+    )
     results = {
         "query_uuid": query_uuid,
         "query_submit_status": query_submit_status,
@@ -1333,33 +1426,13 @@ def get_status(
         "number_of_subqueries_success": number_of_successful_subqueries,
         "number_of_subqueries_failed": number_of_failed_subqueries,
         "query_total_row_count": int(query_total_row_count),
-        "success_total_row_count": int(total_success_row_count),
+        "output_total_row_count": int(total_success_row_count),
+        "output_file_size": success_total_size,
+        "output_file_units": file_units,
+        "runtime_since_submit_seconds": round(time_since_query_seconds, 1),
+        "processing_estimated_time_remaining_seconds": time_remaining_seconds,
     }
-    # file size
-    if filesize_units == "GB":
-        divisor = 1_000_000_000
-        results["success_total_size_GB"] = float(round(total_success_bytes / divisor, 3))
-    elif filesize_units == "TB":
-        divisor = 1_000_000_000_000
-        results["success_total_size_TB"] = float(round(total_success_bytes / divisor, 3))
-    else:
-        divisor = 1_000_000
-        results["success_total_size_MB"] = float(round(total_success_bytes / divisor, 3))
-    results["runtime_since_submit_seconds"] = round(time_since_query_seconds, 1)
-    # time remaining estimate
-    if processing_status == "Complete":
-        time_remaining_seconds = 0.0
-    else:
-        if number_of_successful_subqueries > 0:
-            percent_remaining = 100 - percent_complete
-            time_remaining_seconds = (
-                time_since_query_seconds * percent_remaining / percent_complete
-            )
-            time_remaining_seconds = float(round(time_remaining_seconds, 1))
-        else:
-            time_remaining_seconds = None
-    results["processing_estimated_time_remaining_seconds"] = time_remaining_seconds
-    # failures
+    # add failures (optional)
     if return_failures and failed_process_results_df.shape[0] > 0:
         export_cols = [
             "SubQuery",
@@ -1382,6 +1455,8 @@ def get_status(
 
 @dataclass
 class RegEx:
+    """regular expressions used by pydantic input validation"""
+
     uuid: str = (
         r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     )
@@ -1391,6 +1466,8 @@ class RegEx:
 
 
 class IngestHttpRequest(BaseModel):
+    """pydantic input validation for Azure Ingest Test Data Function"""
+
     log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
     log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
@@ -1407,9 +1484,12 @@ class IngestHttpRequest(BaseModel):
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
     number_of_columns: int = Field(default=10, gt=2)
+    max_rows_per_request: int = Field(default=5_000_000, gt=0)
 
 
 class SubmitQueryHttpRequest(BaseModel):
+    """pydantic input validation for Azure Submit Query Function"""
+
     query_uuid: str = Field(default=str(uuid.uuid4()), pattern=RegEx.uuid)
     subscription_id: str = Field(pattern=RegEx.uuid)
     resource_group_name: str = Field(min_length=3)
@@ -1426,7 +1506,6 @@ class SubmitQueryHttpRequest(BaseModel):
     )
     storage_blob_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_blob_container_name: str = Field(min_length=3)
-    storage_blob_output_format: str = Field(default="JSONL", min_length=3)
     storage_table_url: str = Field(
         default=env_var_storage_table_url,
         pattern=RegEx.url,
@@ -1442,9 +1521,15 @@ class SubmitQueryHttpRequest(BaseModel):
     table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
     start_datetime: str = Field(pattern=RegEx.datetime)
     end_datetime: str = Field(pattern=RegEx.datetime)
+    query_row_limit: int = Field(default=250_000, gt=0)
+    query_row_limit_correction: int = Field(default=1_000, ge=0)
+    break_up_query_freq: str = Field(default="4h", min_length=2)
+    storage_blob_output_format: str = Field(default="JSONL", min_length=3)
 
 
 class GetQueryStatusHttpRequest(BaseModel):
+    """pydantic input validation for Azure Get Status Function"""
+
     query_uuid: str = Field(pattern=RegEx.uuid)
     storage_table_url: str = Field(
         default=env_var_storage_table_url,
@@ -1487,6 +1572,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
     timedelta_seconds = validated_inputs.timedelta_seconds
     number_of_rows = validated_inputs.number_of_rows
     number_of_columns = validated_inputs.number_of_columns
+    max_rows_per_request = validated_inputs.max_rows_per_request
     # generate fake data and ingest
     try:
         results = generate_and_ingest_test_data(
@@ -1499,9 +1585,10 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
             start_datetime,
             timedelta_seconds,
             number_of_rows,
-            number_of_columns,
+            number_of_columns=number_of_columns,
+            max_rows_per_request=max_rows_per_request,
         )
-        logging.info(f"Success: {results}")
+        logging.info("Success: %s", results)
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
@@ -1545,13 +1632,16 @@ def azure_submit_query(
     storage_queue_name = validated_inputs.storage_queue_name
     storage_blob_url = validated_inputs.storage_blob_url
     storage_blob_container_name = validated_inputs.storage_blob_container_name
-    storage_blob_output_format = validated_inputs.storage_blob_output_format
     storage_table_url = validated_inputs.storage_table_url
     storage_table_query_name = validated_inputs.storage_table_query_name
     storage_table_process_name = validated_inputs.storage_table_process_name
     table_names_and_columns = validated_inputs.table_names_and_columns
     start_datetime = validated_inputs.start_datetime
     end_datetime = validated_inputs.end_datetime
+    query_row_limit = validated_inputs.query_row_limit
+    query_row_limit_correction = validated_inputs.query_row_limit_correction
+    break_up_query_freq = validated_inputs.break_up_query_freq
+    storage_blob_output_format = validated_inputs.storage_blob_output_format
     # split query, generate messages, and send to queue
     try:
         results = query_log_analytics_send_to_queue(
@@ -1571,9 +1661,12 @@ def azure_submit_query(
             table_names_and_columns,
             start_datetime,
             end_datetime,
+            query_row_limit=query_row_limit,
+            query_row_limit_correction=query_row_limit_correction,
+            break_up_query_freq=break_up_query_freq,
             storage_blob_output_format=storage_blob_output_format,
         )
-        logging.info(f"Success: {results}")
+        logging.info("Success: %s", results)
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
@@ -1622,7 +1715,7 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
             return_failures=return_failures,
             filesize_units=filesize_units,
         )
-        logging.info(f"Success: {results}")
+        logging.info("Success: %s", results)
     except Exception as e:
         return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
@@ -1631,17 +1724,20 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
         "query_submit_status": results["query_submit_status"],
         "query_processing_status": results["query_processing_status"],
         "processing_percent_complete": results["processing_percent_complete"],
+        "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
         "processing_estimated_time_remaining_seconds": results[
             "processing_estimated_time_remaining_seconds"
         ],
         "number_of_subqueries": results["number_of_subqueries"],
         "number_of_subqueries_success": results["number_of_subqueries_success"],
         "number_of_subqueries_failed": results["number_of_subqueries_failed"],
-        "query_total_row_count": results["query_total_row_count"],
-        "output_total_row_count": results["success_total_row_count"],
-        "output_total_file_size_GB": results["success_total_size_GB"],
-        "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
+        "query_row_count": results["query_total_row_count"],
+        "output_row_count": results["output_total_row_count"],
+        "output_file_size": results["output_file_size"],
+        "output_file_units": results["output_file_units"],
     }
+    if results.get("failures"):
+        return_resposne["failures"] = results["failures"]
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
     )
@@ -1662,7 +1758,7 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
     connection="storageAccountConnectionString",
 )
 def azure_process_queue(msg: func.QueueMessage) -> None:
-    logging.info(f"Python storage queue event triggered")
+    logging.info("Python storage queue event triggered")
     logging.info("Running azure_process_queue function...")
     start_time = time.time()
     # log analytics connection
@@ -1675,9 +1771,10 @@ def azure_process_queue(msg: func.QueueMessage) -> None:
             log_client,
             message_content,
         )
-        logging.info(f"Success, Runtime: {round(time.time() - start_time, 1)} seconds")
+        time_calculation = round(time.time() - start_time, 1)
+        logging.info("Success, Runtime: %s seconds", time_calculation)
     except Exception as e:
-        raise Exception(f"Failed: {e}")
+        raise Exception("Failed to process queue message") from e
 
 
 @app.queue_trigger(
@@ -1686,14 +1783,14 @@ def azure_process_queue(msg: func.QueueMessage) -> None:
     connection="storageAccountConnectionString",
 )
 def azure_process_poison_queue(msg: func.QueueMessage) -> None:
-    logging.info(f"Python storage queue event triggered")
+    logging.info("Python storage queue event triggered")
     logging.info("Running azure_process_poison_queue function...")
     start_time = time.time()
     try:
         # validate message
         message = msg.get_json()
         message_validation_check(message)
-        logging.info(f"Processing Message: {message}")
+        logging.info("Processing Message: %s", message)
         # storage table connection for logging
         # note: requires Storage Table Data Contributor role
         storage_table_url = message["StorageTableURL"]
@@ -1729,7 +1826,9 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
             "TimeGenerated": time_generated,
         }
         table_client.upsert_entity(return_message, mode=UpdateMode.REPLACE)
-        logging.info(f"Success, Runtime: {round(time.time() - start_time, 1)} seconds")
+        runtime_calculation = round(time.time() - start_time, 1)
+        logging.info("Success, Runtime: %s seconds", runtime_calculation)
     except Exception as e:
-        logging.info(f"Invalid message: {msg.get_body().decode('utf-8')}")
-        raise Exception(f"Failed: {e}")
+        message_body_decoded = msg.get_body().decode("utf-8")
+        logging.info("Invalid message: %s", message_body_decoded)
+        raise Exception("Failed, Invalid message") from e
