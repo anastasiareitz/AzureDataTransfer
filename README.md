@@ -183,7 +183,11 @@ The query will be split into chunks and then saved as messages in a storage queu
 
 1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
    - Manually restart Azure Function App in Azure Portal
-   - Use Premium or Dedicated Plan   
+   - Use Premium or Dedicated Plan
+
+2. Submit Query function exceeds 10 min limit and fails
+   - Reduce the datetime range of the query
+   - Use Premium or Dedicated Plan with no time limit
 
 ## Changelog
 
