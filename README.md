@@ -188,7 +188,8 @@ The query will be split into chunks and then saved as messages in a storage queu
 ## Changelog
 
 1.4.0:
-- refactored code and made pylint edits 
+- refactored code and made pylint edits
+- changed logging to % formating from f-strings
 
 1.3.1:
 - Fixed UTC timezone bug
