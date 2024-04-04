@@ -165,16 +165,17 @@ The query will be split into chunks and then saved as messages in a storage queu
 {
     "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "query_submit_status": "Success",
-    "query_processing_status": "Partial",
+    "processing_status": "Partial",
     "processing_percent_complete": 29.5,
-    "processing_estimated_time_remaining_seconds": 1107.9,
+    "runtime_since_submit_seconds": 463.6
+    "estimated_time_remaining_seconds": 1107.9,
     "number_of_subqueries": 95,
     "number_of_subqueries_success": 28,
     "number_of_subqueries_failed": 0,
-    "query_total_row_count": 23000000,
-    "output_total_row_count": 6972002,
-    "output_total_file_size_GB": 2.05,
-    "runtime_since_submit_seconds": 463.6
+    "query_row_count": 23000000,
+    "output_row_count": 6972002,
+    "output_file_size": 2.05,
+    "output_file_units" : "GB"
 }
 ```
 
@@ -185,6 +186,9 @@ The query will be split into chunks and then saved as messages in a storage queu
    - Use Premium or Dedicated Plan   
 
 ## Changelog
+
+1.4.0:
+- refactored code and made pylint edits 
 
 1.3.1:
 - Fixed UTC timezone bug
