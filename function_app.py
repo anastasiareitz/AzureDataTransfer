@@ -1661,7 +1661,7 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         "rows_ingested": results["RowsIngested"],
         "valid_datetime_range": results["ValidDatetimeRange"],
         "runtime_seconds": results["RuntimeSeconds"],
-        "query_ingest_datetime": results["TimeGenerated"],
+        "ingest_datetime": results["TimeGenerated"],
     }
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
@@ -1735,7 +1735,7 @@ def azure_submit_query(
     # response
     return_resposne = {
         "query_uuid": results["PartitionKey"],
-        "query_submit_status": results["Status"],
+        "submit_status": results["Status"],
         "table_names": results["Tables"],
         "start_datetime": results["StartDatetime"],
         "end_datetime": results["EndDatetime"],
@@ -1743,7 +1743,7 @@ def azure_submit_query(
         "subqueries_generated": results["MessagesGenerated"],
         "subqueries_sent_to_queue": results["MessagesSentToQueue"],
         "runtime_seconds": results["RuntimeSeconds"],
-        "query_submit_datetime": results["TimeGenerated"],
+        "submit_datetime": results["TimeGenerated"],
     }
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
@@ -1762,6 +1762,7 @@ def azure_submit_queries(
     """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_submit_queries function...")
+    start_time = time.time()
     # input validation
     request_body = req.get_json()
     try:
@@ -1769,110 +1770,158 @@ def azure_submit_queries(
     except Exception as e:
         logging.error("Invalid Inputs, Exception: %s", e)
         return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
-    # storage queue connection
-    # note: need to add Storage Queue Data Contributor role
+    # extract values
+    query_uuid = validated_inputs.query_uuid
+    subscription_id = validated_inputs.subscription_id
+    resource_group_name = validated_inputs.resource_group_name
+    workspace_name = validated_inputs.log_analytics_worksapce_name
+    workspace_id = validated_inputs.log_analytics_workspace_id
     storage_queue_url = validated_inputs.storage_queue_url
     storage_queue_query_name = validated_inputs.storage_queue_query_name
-    storage_queue_url_and_name = storage_queue_url + storage_queue_query_name
-    queue_client = QueueClient.from_queue_url(storage_queue_url_and_name, credential)
-    # split up datetime range
-    freq = validated_inputs.parallel_process_break_up_query_freq
+    storage_queue_process_name = validated_inputs.storage_queue_process_name
+    storage_blob_url = validated_inputs.storage_blob_url
+    storage_container_name = validated_inputs.storage_blob_container_name
+    storage_table_url = validated_inputs.storage_table_url
+    storage_table_query_name = validated_inputs.storage_table_query_name
+    storage_table_process_name = validated_inputs.storage_table_process_name
+    table_names_and_columns = validated_inputs.table_names_and_columns
     start_datetime = validated_inputs.start_datetime
     end_datetime = validated_inputs.end_datetime
-    date_range = pd.date_range(start=start_datetime, end=end_datetime, freq=freq)
-    if date_range[-1] != pd.to_datetime(end_datetime):
-        date_range = date_range.union(pd.to_datetime([end_datetime]))
-    date_ranges = [
-        each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
-    ]
-    time_pairs = [
-        (date_ranges[i], date_ranges[i + 1]) for i in range(len(date_ranges) - 1)
-    ]
-    # generate messages
-    messages = []
-    for each_time_pair in time_pairs:
-        each_start_datetime, each_end_datetime = each_time_pair
-        each_message = {}
-        each_message["QueryUUID"] = validated_inputs.query_uuid
-        each_message["Subscription"] = validated_inputs.subscription_id
-        each_message["ResourceGroup"] = validated_inputs.resource_group_name
-        each_message["LogAnalyticsWorkspace"] = (
-            validated_inputs.log_analytics_worksapce_name
+    query_row_limit = validated_inputs.query_row_limit
+    query_row_limit_correction = validated_inputs.query_row_limit_correction
+    break_up_query_freq = validated_inputs.break_up_query_freq
+    output_format = validated_inputs.storage_blob_output_format
+    # connections
+    try:
+        # storage queue connection
+        # note: need to add Storage Queue Data Contributor role
+        storage_queue_url_and_name = storage_queue_url + storage_queue_query_name
+        queue_client = QueueClient.from_queue_url(
+            storage_queue_url_and_name, credential
         )
-        each_message["LogAnalyticsWorkspaceId"] = (
-            validated_inputs.log_analytics_workspace_id
-        )
-        each_message["StorageQueueURL"] = storage_queue_url
-        each_message["StorageQueueName"] = validated_inputs.storage_queue_process_name
-        each_message["StorageBlobURL"] = validated_inputs.storage_blob_url
-        each_message["StorageContainer"] = validated_inputs.storage_blob_container_name
-        each_message["StorageTableURL"] = validated_inputs.storage_table_url
-        each_message["StorageTableQueryName"] = (
-            validated_inputs.storage_table_query_name
-        )
-        each_message["StorageTableProcessName"] = (
-            validated_inputs.storage_table_process_name
-        )
-        each_message["TableNamesColumns"] = validated_inputs.table_names_and_columns
-        each_message["StartDatetime"] = each_start_datetime
-        each_message["EndDatetime"] = each_end_datetime
-        each_message["QueryRowLimit"] = validated_inputs.query_row_limit
-        each_message["QueryRowLimitCorrection"] = (
-            validated_inputs.query_row_limit_correction
-        )
-        each_message["BreakUpQueryFreq"] = validated_inputs.break_up_query_freq
-        each_message["StorageBlobOutputFormat"] = (
-            validated_inputs.storage_blob_output_format
-        )
-        messages.append(each_message)
-    number_of_messages = len(messages)
-    # send messages to queue
-    successful_sends = 0
-    get_queue_properties = queue_client.get_queue_properties()
-    logging.info("Initial Queue Status: %s", get_queue_properties)
-    for each_msg in messages:
-        each_result = send_message_to_queue(queue_client, each_msg)
-        if each_result == "Success":
-            successful_sends += 1
-    logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
-    get_queue_properties = queue_client.get_queue_properties()
-    logging.info("Updated Queue Status: %s", get_queue_properties)
-    if successful_sends == 0:
-        logging.error(
-            "Failed to send any messages to query queue, %s of %s",
-            successful_sends,
-            number_of_messages,
-        )
-        status = "Failed"
-    elif successful_sends != number_of_messages:
-        logging.error(
-            "Failed to send some messages to query queue, %s of %s",
-            successful_sends,
-            number_of_messages,
-        )
-        status = "Partial"
-    else:
-        logging.info("Success, sent all messages to queue")
-        status = "Success"
+        # log analytics connection
+        # note: need to add Log Analytics Contributor and Monitor Publisher role
+        log_client = LogsQueryClient(credential)
+    except Exception as e:
+        logging.error("Failed: %s", e)
+        return func.HttpResponse(f"Failed: {e}", status_code=500)
+    # split query and send to queue
+    try:
+        # get total result count
+        total_query_count = 0
+        for each_table_name in table_names_and_columns:
+            each_count = query_log_analytics_get_table_count(
+                workspace_id, log_client, each_table_name, start_datetime, end_datetime
+            )
+            total_query_count += each_count
+        logging.info("Total Row Count: %s", total_query_count)
+        if total_query_count > 0:
+            # split up datetime range
+            freq = validated_inputs.parallel_process_break_up_query_freq
+            date_range = pd.date_range(
+                start=start_datetime, end=end_datetime, freq=freq
+            )
+            if date_range[-1] != pd.to_datetime(end_datetime):
+                date_range = date_range.union(pd.to_datetime([end_datetime]))
+            date_ranges = [
+                each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
+            ]
+            time_pairs = [
+                (date_ranges[i], date_ranges[i + 1])
+                for i in range(len(date_ranges) - 1)
+            ]
+            # generate messages
+            messages = []
+            for each_time_pair in time_pairs:
+                each_start_datetime, each_end_datetime = each_time_pair
+                each_message = {}
+                each_message["QueryUUID"] = query_uuid
+                each_message["Subscription"] = subscription_id
+                each_message["ResourceGroup"] = resource_group_name
+                each_message["LogAnalyticsWorkspace"] = workspace_name
+                each_message["LogAnalyticsWorkspaceId"] = workspace_id
+                each_message["StorageQueueURL"] = storage_queue_url
+                each_message["StorageQueueName"] = storage_queue_process_name
+                each_message["StorageBlobURL"] = storage_blob_url
+                each_message["StorageContainer"] = storage_container_name
+                each_message["StorageTableURL"] = storage_table_url
+                each_message["StorageTableQueryName"] = storage_table_query_name
+                each_message["StorageTableProcessName"] = storage_table_process_name
+                each_message["TableNamesColumns"] = table_names_and_columns
+                each_message["StartDatetime"] = each_start_datetime
+                each_message["EndDatetime"] = each_end_datetime
+                each_message["QueryRowLimit"] = query_row_limit
+                each_message["QueryRowLimitCorrection"] = query_row_limit_correction
+                each_message["BreakUpQueryFreq"] = break_up_query_freq
+                each_message["StorageBlobOutputFormat"] = output_format
+                messages.append(each_message)
+            number_of_messages = len(messages)
+            # send messages to queue
+            successful_sends = 0
+            get_queue_properties = queue_client.get_queue_properties()
+            logging.info("Initial Queue Status: %s", get_queue_properties)
+            for each_msg in messages:
+                each_result = send_message_to_queue(queue_client, each_msg)
+                if each_result == "Success":
+                    successful_sends += 1
+            logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
+            get_queue_properties = queue_client.get_queue_properties()
+            logging.info("Updated Queue Status: %s", get_queue_properties)
+            if successful_sends == 0:
+                logging.error(
+                    "Failed to send any messages to query queue, %s of %s",
+                    successful_sends,
+                    number_of_messages,
+                )
+                status = "Failed"
+            elif successful_sends != number_of_messages:
+                logging.error(
+                    "Failed to send some messages to query queue, %s of %s",
+                    successful_sends,
+                    number_of_messages,
+                )
+                status = "Partial"
+            else:
+                logging.info("Success, sent all messages to queue")
+                status = "Success"
+        # no data during datetime range
+        else:
+            status = "Success"
+            number_of_messages = 0
+            successful_sends = 0
+            logging.info("No data during %s-%s", start_datetime, end_datetime)
+    except Exception as e:
+        logging.error("Failed: %s", e)
+        return func.HttpResponse(f"Failed: {e}", status_code=500)
     # response
+    table_names_join = ", ".join(table_names_and_columns.keys())
+    time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
+    time_calculation = round(time.time() - start_time, 1)
     return_resposne = {
-        "query_uuid": validated_inputs.query_uuid,
-        "query_submit_status": status,
+        "query_uuid": query_uuid,
+        "split_status": status,
+        "table_names": table_names_join,
+        "start_datetime": start_datetime,
+        "end_datetime": end_datetime,
         "number_of_messages_generated": number_of_messages,
         "number_of_messages_sent": successful_sends,
+        "total_row_count": int(total_query_count),
+        "runtime_seconds": time_calculation,
+        "split_datetime": time_generated,
     }
+    logging.info(return_resposne)
     return func.HttpResponse(
         json.dumps(return_resposne), mimetype="application/json", status_code=200
     )
 
 
-@app.route(route="azure_get_query_status")
-def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
+@app.route(route="azure_get_status")
+def azure_get_status(req: func.HttpRequest) -> func.HttpResponse:
     """
     Azure HTTP Triggered Function to get a query status
     """
     logging.info("Python HTTP trigger function processed a request")
-    logging.info("Running azure_get_query_status function...")
+    logging.info("Running azure_get_status function...")
     # input validation
     request_body = req.get_json()
     try:
@@ -1905,8 +1954,8 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
     # response
     return_resposne = {
         "query_uuid": results["query_uuid"],
-        "query_submit_status": results["query_submit_status"],
-        "query_processing_status": results["query_processing_status"],
+        "submit_status": results["query_submit_status"],
+        "processing_status": results["query_processing_status"],
         "percent_complete": results["processing_percent_complete"],
         "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
         "estimated_time_remaining_seconds": results[
