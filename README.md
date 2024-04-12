@@ -38,8 +38,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 1. Log Analytics Workspace (data source)
 2. Storage Account
 - Container (data output destination)
-- Queue (temp storage for split query messages/jobs)
-- Table (logging for status checks)
+- Queues (temp storage for split query messages/jobs)
+- Tables (logging for status checks)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 4. Azure API Management (frontend user interface, optional) (alternative: Azure Function or Web App Service to host Flask/FastAPI)
 
