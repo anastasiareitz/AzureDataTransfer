@@ -393,9 +393,7 @@ def break_up_initial_date_range(
     date_range = pd.date_range(start=start_datetime, end=end_datetime, freq=freq)
     if date_range[-1] != pd.to_datetime(end_datetime):
         date_range = date_range.union(pd.to_datetime([end_datetime]))
-    date_ranges = [
-        each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
-    ]
+    date_ranges = [each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()]
     time_pairs = [
         (date_ranges[i], date_ranges[i + 1]) for i in range(len(date_ranges) - 1)
     ]
@@ -461,9 +459,7 @@ def query_log_analytics_get_time_ranges(
     # using copy and .loc to prevent chaining warning
     df_copy = df.copy()
     final_endtime = df_copy["EndTime"].tail(1).item()
-    new_final_endtime = str(
-        pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s")
-    )
+    new_final_endtime = str(pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s"))
     new_final_endtime_fix_format = new_final_endtime.replace(" ", "T")
     new_final_endtime_fix_format = new_final_endtime_fix_format.replace("00+00:00", "Z")
     df_copy.loc[df_copy.index[-1], "EndTime"] = new_final_endtime_fix_format
@@ -1017,9 +1013,7 @@ def process_queue_message(
     logging.info("Processing Message: %s", message)
     # query log analytics
     query_results_df = query_log_analytics_get_query_results(log_client, message)
-    logging.info(
-        "Successfully Downloaded from Log Analytics: %s", query_results_df.shape
-    )
+    logging.info("Successfully Downloaded from Log Analytics: %s", query_results_df.shape)
     # confirm count matches
     if query_results_df.shape[0] != message["Count"]:
         logging.error("Row count doesn't match expected value, %s", message)
@@ -1105,9 +1099,7 @@ def process_queue_messages_loop(
     Returns:
         dict of results summary
     """
-    logging.info(
-        "Processing Queue Messages, press CTRL+C or interupt kernel to stop..."
-    )
+    logging.info("Processing Queue Messages, press CTRL+C or interupt kernel to stop...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1436,6 +1428,7 @@ def get_status(
         query_results_status = query_results_status.replace("'", "")
     query_submit_status = query_results_status
     query_total_row_count = query_results_df.TotalRowCount.sum()
+    number_of_query_splits = query_results_df.shape[0]
     number_of_subqueries = query_results_df.MessagesSentToQueue.sum()
     number_of_successful_subqueries = success_process_results_df.shape[0]
     number_of_failed_subqueries = failed_process_results_df.shape[0]
@@ -1462,6 +1455,7 @@ def get_status(
     results = {
         "query_uuid": query_uuid,
         "query_submit_status": query_submit_status,
+        "query_submit_splits": number_of_query_splits,
         "query_processing_status": processing_status,
         "processing_percent_complete": float(percent_complete),
         "number_of_subqueries": int(number_of_subqueries),
@@ -1510,9 +1504,7 @@ class RegEx:
 class IngestHttpRequest(BaseModel):
     """pydantic input validation for Azure Ingest Test Data Function"""
 
-    log_analytics_data_collection_endpoint: str = Field(
-        pattern=RegEx.url, min_length=10
-    )
+    log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
     log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
     storage_table_url: str = Field(
@@ -1796,9 +1788,7 @@ def azure_submit_queries(
         # storage queue connection
         # note: need to add Storage Queue Data Contributor role
         storage_queue_url_and_name = storage_queue_url + storage_queue_query_name
-        queue_client = QueueClient.from_queue_url(
-            storage_queue_url_and_name, credential
-        )
+        queue_client = QueueClient.from_queue_url(storage_queue_url_and_name, credential)
         # log analytics connection
         # note: need to add Log Analytics Contributor and Monitor Publisher role
         log_client = LogsQueryClient(credential)
@@ -1818,17 +1808,14 @@ def azure_submit_queries(
         if total_query_count > 0:
             # split up datetime range
             freq = validated_inputs.parallel_process_break_up_query_freq
-            date_range = pd.date_range(
-                start=start_datetime, end=end_datetime, freq=freq
-            )
+            date_range = pd.date_range(start=start_datetime, end=end_datetime, freq=freq)
             if date_range[-1] != pd.to_datetime(end_datetime):
                 date_range = date_range.union(pd.to_datetime([end_datetime]))
             date_ranges = [
                 each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
             ]
             time_pairs = [
-                (date_ranges[i], date_ranges[i + 1])
-                for i in range(len(date_ranges) - 1)
+                (date_ranges[i], date_ranges[i + 1]) for i in range(len(date_ranges) - 1)
             ]
             # generate messages
             messages = []
@@ -1954,6 +1941,7 @@ def azure_get_status(req: func.HttpRequest) -> func.HttpResponse:
     # response
     return_resposne = {
         "query_uuid": results["query_uuid"],
+        "query_partitions": results["query_submit_splits"],
         "submit_status": results["query_submit_status"],
         "processing_status": results["query_processing_status"],
         "percent_complete": results["processing_percent_complete"],
