@@ -21,7 +21,7 @@ from azure.storage.blob import ContainerClient
 from azure.storage.queue import QueueClient, QueueMessage
 from pydantic import BaseModel, Field
 
-# pyarrow required for pandas parquet output
+# pyarrow required for pandas parquet output, check without importing
 check_packages_installed = ["pyarrow"]
 for each_package in check_packages_installed:
     if not importlib.util.find_spec(each_package):
@@ -40,14 +40,17 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 # 6. Storage Table Data Contributor
 credential = DefaultAzureCredential()
 
-# setup for storage queue trigger via managed identity
+# setup for storage queue triggers via managed identity
 # env variables (required)
 # Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 # add 1. storageAccountConnectionString__queueServiceUri -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 # add 2. storageAccountConnectionString__credential -> managedidentity
-# add 3. QueueName -> <QUEUE_NAME>
-env_var_storage_queue_name = os.environ["QueueName"]
-storage_poison_queue_name = env_var_storage_queue_name + "-poison"
+# add 3. QueueQueryName -> <QUEUE_NAME>
+# add 4. QueueProcessName -> <QUEUE_NAME>
+env_var_queue_query_name = os.environ["QueueQueryName"]
+poison_queue_query_name = env_var_queue_query_name + "-poison"
+env_var_queue_process_name = os.environ["QueueProcessName"]
+poison_queue_process_name = env_var_queue_process_name + "-poison"
 
 # additional env variables to simplify requests (optional)
 env_var_storage_queue_url = os.environ.get("QueueURL")
@@ -387,14 +390,15 @@ def query_log_analytics_get_table_columns(
 def break_up_initial_date_range(
     table_name: str, start_datetime: str, end_datetime: str, freq: str
 ) -> pd.DataFrame:
-    # break up date range
     date_range = pd.date_range(start=start_datetime, end=end_datetime, freq=freq)
-    date_range = [str(each) for each in date_range.to_list()]
-    # fix for final timestamp
-    date_range += [end_datetime]
-    if date_range[-1] == date_range[-2]:
-        date_range.pop(-1)
-    time_pairs = [(date_range[i], date_range[i + 1]) for i in range(len(date_range) - 1)]
+    if date_range[-1] != pd.to_datetime(end_datetime):
+        date_range = date_range.union(pd.to_datetime([end_datetime]))
+    date_ranges = [
+        each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
+    ]
+    time_pairs = [
+        (date_ranges[i], date_ranges[i + 1]) for i in range(len(date_ranges) - 1)
+    ]
     # convert to dataframe
     df_time_pairs = pd.DataFrame(time_pairs, columns=["start_date", "end_date"])
     df_time_pairs.insert(loc=0, column="table", value=[table_name] * len(df_time_pairs))
@@ -457,7 +461,9 @@ def query_log_analytics_get_time_ranges(
     # using copy and .loc to prevent chaining warning
     df_copy = df.copy()
     final_endtime = df_copy["EndTime"].tail(1).item()
-    new_final_endtime = str(pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s"))
+    new_final_endtime = str(
+        pd.to_datetime(final_endtime) + pd.to_timedelta("0.0000001s")
+    )
     new_final_endtime_fix_format = new_final_endtime.replace(" ", "T")
     new_final_endtime_fix_format = new_final_endtime_fix_format.replace("00+00:00", "Z")
     df_copy.loc[df_copy.index[-1], "EndTime"] = new_final_endtime_fix_format
@@ -590,18 +596,15 @@ def process_query_results_df(
     query_results_df.insert(loc=1, column="Columns", value=column_names)
     # add azure property columns
     query_results_df.insert(loc=0, column="QueryUUID", value=query_uuid)
-    index_column = list(range(1, len(query_results_df) + 1))
-    index_column_text = [f"{each} of {len(query_results_df)}" for each in index_column]
-    query_results_df.insert(loc=1, column="SubQuery", value=index_column_text)
-    query_results_df.insert(loc=6, column="Subscription", value=subscription_id)
-    query_results_df.insert(loc=7, column="ResourceGroup", value=resource_group)
-    query_results_df.insert(loc=8, column="LogAnalyticsWorkspace", value=worksapce_name)
-    query_results_df.insert(loc=9, column="LogAnalyticsWorkspaceId", value=workspace_id)
-    query_results_df.insert(loc=10, column="StorageBlobURL", value=storage_blob_url)
-    query_results_df.insert(loc=11, column="StorageContainer", value=storage_blob_name)
-    query_results_df.insert(loc=12, column="OutputFormat", value=storage_blob_output)
-    query_results_df.insert(loc=13, column="StorageTableURL", value=storage_table_url)
-    query_results_df.insert(loc=14, column="StorageTableName", value=storage_table_name)
+    query_results_df.insert(loc=5, column="Subscription", value=subscription_id)
+    query_results_df.insert(loc=6, column="ResourceGroup", value=resource_group)
+    query_results_df.insert(loc=7, column="LogAnalyticsWorkspace", value=worksapce_name)
+    query_results_df.insert(loc=8, column="LogAnalyticsWorkspaceId", value=workspace_id)
+    query_results_df.insert(loc=9, column="StorageBlobURL", value=storage_blob_url)
+    query_results_df.insert(loc=10, column="StorageContainer", value=storage_blob_name)
+    query_results_df.insert(loc=11, column="OutputFormat", value=storage_blob_output)
+    query_results_df.insert(loc=12, column="StorageTableURL", value=storage_table_url)
+    query_results_df.insert(loc=13, column="StorageTableName", value=storage_table_name)
     # rename columns
     query_results_df_rename = query_results_df.rename(
         columns={"StartTime": "StartDatetime", "EndTime": "EndDatetime"}
@@ -711,64 +714,71 @@ def query_log_analytics_send_to_queue(
         )
         total_query_results_count_expected += each_count
     logging.info("Total Row Count: %s", total_query_results_count_expected)
-    # break up queries by table and date ranges
-    table_names = list(table_names_and_columns.keys())
-    df_queries = break_up_initial_query_time_freq(
-        table_names, start_datetime, end_datetime, break_up_query_freq
-    )
-    # query log analytics, gets datetime splits for row limit
-    query_results_df = query_log_analytics_split_query_rows_loop(
-        df_queries,
-        workspace_id,
-        log_client,
-        query_row_limit,
-        query_row_limit_correction,
-    )
-    # confirm count of split queries
-    total_query_results_count = query_results_df["Count"].sum()
-    logging.info("Split Queries Total Row Count: %s", total_query_results_count)
-    if total_query_results_count != total_query_results_count_expected:
-        raise Exception("Error: Row Count Mismatch")
-    if not query_results_df.empty:
-        # process results, add columns, and convert to list of dicts
-        results = process_query_results_df(
-            query_results_df,
-            query_uuid,
-            table_names_and_columns,
-            subscription_id,
-            resource_group,
-            worksapce_name,
-            workspace_id,
-            storage_blob_url,
-            storage_blob_container,
-            storage_blob_output_format,
-            storage_table_url,
-            storage_table_process_name,
+    if total_query_results_count_expected > 0:
+        # break up queries by table and date ranges
+        table_names = list(table_names_and_columns.keys())
+        df_queries = break_up_initial_query_time_freq(
+            table_names, start_datetime, end_datetime, break_up_query_freq
         )
-        number_of_results = len(results)
-        # send to queue
-        successful_sends = 0
-        get_queue_properties = queue_client.get_queue_properties()
-        logging.info("Initial Queue Status: %s", get_queue_properties)
-        for each_msg in results:
-            each_result = send_message_to_queue(queue_client, each_msg)
-            if each_result == "Success":
-                successful_sends += 1
-        logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
-        get_queue_properties = queue_client.get_queue_properties()
-        logging.info("Updated Queue Status: %s", get_queue_properties)
-        if successful_sends == number_of_results:
-            status = "Success"
+        # query log analytics, gets datetime splits for row limit
+        query_results_df = query_log_analytics_split_query_rows_loop(
+            df_queries,
+            workspace_id,
+            log_client,
+            query_row_limit,
+            query_row_limit_correction,
+        )
+        if not query_results_df.empty:
+            # confirm count of split queries
+            total_query_results_count = query_results_df["Count"].sum()
+            logging.info("Split Queries Total Row Count: %s", total_query_results_count)
+            if total_query_results_count != total_query_results_count_expected:
+                raise Exception("Error: Row Count Mismatch")
+            # process results, add columns, and convert to list of dicts
+            results = process_query_results_df(
+                query_results_df,
+                query_uuid,
+                table_names_and_columns,
+                subscription_id,
+                resource_group,
+                worksapce_name,
+                workspace_id,
+                storage_blob_url,
+                storage_blob_container,
+                storage_blob_output_format,
+                storage_table_url,
+                storage_table_process_name,
+            )
+            number_of_results = len(results)
+            # send to queue
+            successful_sends = 0
+            get_queue_properties = queue_client.get_queue_properties()
+            logging.info("Initial Queue Status: %s", get_queue_properties)
+            for each_msg in results:
+                each_result = send_message_to_queue(queue_client, each_msg)
+                if each_result == "Success":
+                    successful_sends += 1
+            logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
+            get_queue_properties = queue_client.get_queue_properties()
+            logging.info("Updated Queue Status: %s", get_queue_properties)
+            if successful_sends == number_of_results:
+                status = "Success"
+            else:
+                status = "Partial"
+        # no results
         else:
-            status = "Partial"
-    # no results
+            status = "Failed"
+            total_query_results_count = 0
+            number_of_results = 0
+            successful_sends = 0
+            logging.error("Error: No Query Messages Generated, No Query Results")
+    # no data during datetime range
     else:
-        status = "Failed"
+        status = "Success"
+        total_query_results_count = 0
         number_of_results = 0
         successful_sends = 0
-        logging.info("Error: No Query Messages Generated")
-        get_queue_properties = queue_client.get_queue_properties()
-        logging.info("Updated Queue Status: %s", get_queue_properties)
+        logging.info("No data during %s-%s", start_datetime, end_datetime)
     # create hash for RowKey
     row_key = f"{query_uuid}__{status}__{table_names_join}__"
     row_key += f"{start_datetime}__{end_datetime}__"
@@ -857,10 +867,36 @@ def check_if_queue_empty_peek_message(queue_client: QueueClient) -> bool:
         return False
 
 
-def message_validation_check(message: dict) -> None:
+def query_message_validation_check(message: dict) -> None:
     required_fields = [
         "QueryUUID",
-        "SubQuery",
+        "Subscription",
+        "ResourceGroup",
+        "LogAnalyticsWorkspace",
+        "LogAnalyticsWorkspaceId",
+        "StorageQueueURL",
+        "StorageQueueName",
+        "StorageBlobURL",
+        "StorageContainer",
+        "StorageTableURL",
+        "StorageTableQueryName",
+        "StorageTableProcessName",
+        "TableNamesColumns",
+        "StartDatetime",
+        "EndDatetime",
+        "QueryRowLimit",
+        "QueryRowLimitCorrection",
+        "BreakUpQueryFreq",
+        "StorageBlobOutputFormat",
+    ]
+    if not all(each_field in message for each_field in required_fields):
+        logging.error("Invalid message, required fields missing: %s", message)
+        raise Exception(f"Invalid message, required fields missing: {message}")
+
+
+def process_message_validation_check(message: dict) -> None:
+    required_fields = [
+        "QueryUUID",
         "Table",
         "Columns",
         "StartDatetime",
@@ -977,11 +1013,13 @@ def process_queue_message(
     """
     start_time = time.time()
     # validate message
-    message_validation_check(message)
+    process_message_validation_check(message)
     logging.info("Processing Message: %s", message)
     # query log analytics
     query_results_df = query_log_analytics_get_query_results(log_client, message)
-    logging.info("Successfully Downloaded from Log Analytics: %s", query_results_df.shape)
+    logging.info(
+        "Successfully Downloaded from Log Analytics: %s", query_results_df.shape
+    )
     # confirm count matches
     if query_results_df.shape[0] != message["Count"]:
         logging.error("Row count doesn't match expected value, %s", message)
@@ -1016,7 +1054,6 @@ def process_queue_message(
     status = "Success"
     # logging success to storage table
     query_uuid = message["QueryUUID"]
-    sub_query_index = message["SubQuery"]
     table_name = message["Table"]
     start_datetime = message["StartDatetime"]
     start_datetime = start_datetime.replace("T", " ").replace("Z", "")
@@ -1034,7 +1071,6 @@ def process_queue_message(
     return_message = {
         "PartitionKey": query_uuid,
         "RowKey": unique_row_sha256_hash,
-        "SubQuery": sub_query_index,
         "Status": status,
         "Table": table_name,
         "StartDatetime": start_datetime,
@@ -1069,7 +1105,9 @@ def process_queue_messages_loop(
     Returns:
         dict of results summary
     """
-    logging.info("Processing Queue Messages, press CTRL+C or interupt kernel to stop...")
+    logging.info(
+        "Processing Queue Messages, press CTRL+C or interupt kernel to stop..."
+    )
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1255,10 +1293,6 @@ def get_and_process_table_results(
     query_results_df_raw = pd.DataFrame(query_results)
     if query_results_df_raw.shape[0] == 0:
         raise Exception("Query UUID not found in query logs")
-    if query_results_df_raw.shape[0] > 1:
-        logging.warning(
-            "Warning: Found more than 1 row with same Query UUID in query logs"
-        )
     query_results_df = query_results_df_raw.rename(columns=cols_to_rename)
     # process results
     process_results_df_raw = pd.DataFrame(process_results)
@@ -1394,7 +1428,13 @@ def get_status(
     success_process_results_df = table_dfs["success_process_results_df"]
     failed_process_results_df = table_dfs["failed_process_results_df"]
     # summarize results
-    query_submit_status = ", ".join(query_results_df.Status)
+    if len(query_results_df.Status.unique()) == 1:
+        query_results_status = str(query_results_df.Status.unique()[0])
+    else:
+        query_results_status = str(query_results_df.Status.value_counts().to_dict())
+        query_results_status = query_results_status.replace("{", "").replace("}", "")
+        query_results_status = query_results_status.replace("'", "")
+    query_submit_status = query_results_status
     query_total_row_count = query_results_df.TotalRowCount.sum()
     number_of_subqueries = query_results_df.MessagesSentToQueue.sum()
     number_of_successful_subqueries = success_process_results_df.shape[0]
@@ -1470,7 +1510,9 @@ class RegEx:
 class IngestHttpRequest(BaseModel):
     """pydantic input validation for Azure Ingest Test Data Function"""
 
-    log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
+    log_analytics_data_collection_endpoint: str = Field(
+        pattern=RegEx.url, min_length=10
+    )
     log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
     log_analytics_data_collection_stream_name: str = Field(min_length=3)
     storage_table_url: str = Field(
@@ -1503,8 +1545,8 @@ class SubmitQueryHttpRequest(BaseModel):
         min_length=10,
         validate_default=True,
     )
-    storage_queue_name: str = Field(
-        default=env_var_storage_queue_name, min_length=3, validate_default=True
+    storage_queue_process_name: str = Field(
+        default=env_var_queue_process_name, min_length=3, validate_default=True
     )
     storage_blob_url: str = Field(pattern=RegEx.url, min_length=10)
     storage_blob_container_name: str = Field(min_length=3)
@@ -1527,6 +1569,15 @@ class SubmitQueryHttpRequest(BaseModel):
     query_row_limit_correction: int = Field(default=1_000, ge=0)
     break_up_query_freq: str = Field(default="4h", min_length=2)
     storage_blob_output_format: str = Field(default="JSONL", min_length=3)
+
+
+class SubmitQueryHttpRequestSplit(SubmitQueryHttpRequest):
+    """pydantic input validation for Azure Submit Query Function"""
+
+    parallel_process_break_up_query_freq: str = Field(default="1d", min_length=2)
+    storage_queue_query_name: str = Field(
+        default=env_var_queue_query_name, min_length=3, validate_default=True
+    )
 
 
 class GetQueryStatusHttpRequest(BaseModel):
@@ -1556,6 +1607,9 @@ class GetQueryStatusHttpRequest(BaseModel):
 
 @app.route(route="azure_ingest_test_data")
 def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Azure HTTP Triggered Function to ingest test data to log analytics
+    """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_ingest_test_data function...")
     # input validation
@@ -1618,6 +1672,9 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
 def azure_submit_query(
     req: func.HttpRequest,
 ) -> func.HttpResponse:
+    """
+    Azure HTTP Triggered Function to subit query
+    """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_submit_query function...")
     # input validation
@@ -1634,7 +1691,7 @@ def azure_submit_query(
     log_analytics_worksapce_name = validated_inputs.log_analytics_worksapce_name
     log_analytics_workspace_id = validated_inputs.log_analytics_workspace_id
     storage_queue_url = validated_inputs.storage_queue_url
-    storage_queue_name = validated_inputs.storage_queue_name
+    storage_queue_name = validated_inputs.storage_queue_process_name
     storage_blob_url = validated_inputs.storage_blob_url
     storage_blob_container_name = validated_inputs.storage_blob_container_name
     storage_table_url = validated_inputs.storage_table_url
@@ -1693,8 +1750,127 @@ def azure_submit_query(
     )
 
 
+@app.route(route="azure_submit_queries")
+def azure_submit_queries(
+    req: func.HttpRequest,
+) -> func.HttpResponse:
+    """
+    Azure HTTP Triggered Function to subit query
+    Splits datetime range before running submit process
+    Will run across multiple Azure Function instances
+    Use this for 'large' datetime ranges or if exceeding azure function timeout
+    """
+    logging.info("Python HTTP trigger function processed a request")
+    logging.info("Running azure_submit_queries function...")
+    # input validation
+    request_body = req.get_json()
+    try:
+        validated_inputs = SubmitQueryHttpRequestSplit.model_validate(request_body)
+    except Exception as e:
+        logging.error("Invalid Inputs, Exception: %s", e)
+        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
+    # storage queue connection
+    # note: need to add Storage Queue Data Contributor role
+    storage_queue_url = validated_inputs.storage_queue_url
+    storage_queue_query_name = validated_inputs.storage_queue_query_name
+    storage_queue_url_and_name = storage_queue_url + storage_queue_query_name
+    queue_client = QueueClient.from_queue_url(storage_queue_url_and_name, credential)
+    # split up datetime range
+    freq = validated_inputs.parallel_process_break_up_query_freq
+    start_datetime = validated_inputs.start_datetime
+    end_datetime = validated_inputs.end_datetime
+    date_range = pd.date_range(start=start_datetime, end=end_datetime, freq=freq)
+    if date_range[-1] != pd.to_datetime(end_datetime):
+        date_range = date_range.union(pd.to_datetime([end_datetime]))
+    date_ranges = [
+        each.strftime("%Y-%m-%d %H:%M:%S.%f") for each in date_range.to_list()
+    ]
+    time_pairs = [
+        (date_ranges[i], date_ranges[i + 1]) for i in range(len(date_ranges) - 1)
+    ]
+    # generate messages
+    messages = []
+    for each_time_pair in time_pairs:
+        each_start_datetime, each_end_datetime = each_time_pair
+        each_message = {}
+        each_message["QueryUUID"] = validated_inputs.query_uuid
+        each_message["Subscription"] = validated_inputs.subscription_id
+        each_message["ResourceGroup"] = validated_inputs.resource_group_name
+        each_message["LogAnalyticsWorkspace"] = (
+            validated_inputs.log_analytics_worksapce_name
+        )
+        each_message["LogAnalyticsWorkspaceId"] = (
+            validated_inputs.log_analytics_workspace_id
+        )
+        each_message["StorageQueueURL"] = storage_queue_url
+        each_message["StorageQueueName"] = validated_inputs.storage_queue_process_name
+        each_message["StorageBlobURL"] = validated_inputs.storage_blob_url
+        each_message["StorageContainer"] = validated_inputs.storage_blob_container_name
+        each_message["StorageTableURL"] = validated_inputs.storage_table_url
+        each_message["StorageTableQueryName"] = (
+            validated_inputs.storage_table_query_name
+        )
+        each_message["StorageTableProcessName"] = (
+            validated_inputs.storage_table_process_name
+        )
+        each_message["TableNamesColumns"] = validated_inputs.table_names_and_columns
+        each_message["StartDatetime"] = each_start_datetime
+        each_message["EndDatetime"] = each_end_datetime
+        each_message["QueryRowLimit"] = validated_inputs.query_row_limit
+        each_message["QueryRowLimitCorrection"] = (
+            validated_inputs.query_row_limit_correction
+        )
+        each_message["BreakUpQueryFreq"] = validated_inputs.break_up_query_freq
+        each_message["StorageBlobOutputFormat"] = (
+            validated_inputs.storage_blob_output_format
+        )
+        messages.append(each_message)
+    number_of_messages = len(messages)
+    # send messages to queue
+    successful_sends = 0
+    get_queue_properties = queue_client.get_queue_properties()
+    logging.info("Initial Queue Status: %s", get_queue_properties)
+    for each_msg in messages:
+        each_result = send_message_to_queue(queue_client, each_msg)
+        if each_result == "Success":
+            successful_sends += 1
+    logging.info("Messages Successfully Sent to Queue: %s", successful_sends)
+    get_queue_properties = queue_client.get_queue_properties()
+    logging.info("Updated Queue Status: %s", get_queue_properties)
+    if successful_sends == 0:
+        logging.error(
+            "Failed to send any messages to query queue, %s of %s",
+            successful_sends,
+            number_of_messages,
+        )
+        status = "Failed"
+    elif successful_sends != number_of_messages:
+        logging.error(
+            "Failed to send some messages to query queue, %s of %s",
+            successful_sends,
+            number_of_messages,
+        )
+        status = "Partial"
+    else:
+        logging.info("Success, sent all messages to queue")
+        status = "Success"
+    # response
+    return_resposne = {
+        "query_uuid": validated_inputs.query_uuid,
+        "query_submit_status": status,
+        "number_of_messages_generated": number_of_messages,
+        "number_of_messages_sent": successful_sends,
+    }
+    return func.HttpResponse(
+        json.dumps(return_resposne), mimetype="application/json", status_code=200
+    )
+
+
 @app.route(route="azure_get_query_status")
 def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Azure HTTP Triggered Function to get a query status
+    """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_get_query_status function...")
     # input validation
@@ -1762,12 +1938,95 @@ def azure_get_query_status(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.queue_trigger(
     arg_name="msg",
-    queue_name=env_var_storage_queue_name,
+    queue_name=env_var_queue_query_name,
     connection="storageAccountConnectionString",
 )
-def azure_process_queue(msg: func.QueueMessage) -> None:
+def azure_queue_query(msg: func.QueueMessage) -> None:
+    """
+    Azure Function that triggers on messages in Query Queue
+    Submits query for processing
+    """
     logging.info("Python storage queue event triggered")
-    logging.info("Running azure_process_queue function...")
+    logging.info("Running azure_queue_query function...")
+    start_time = time.time()
+    # process message
+    message_content = msg.get_json()
+    query_message_validation_check(message_content)
+    # extract fields
+    query_uuid = message_content["QueryUUID"]
+    subscription_id = message_content["Subscription"]
+    resource_group_name = message_content["ResourceGroup"]
+    log_analytics_worksapce_name = message_content["LogAnalyticsWorkspace"]
+    log_analytics_workspace_id = message_content["LogAnalyticsWorkspaceId"]
+    storage_queue_url = message_content["StorageQueueURL"]
+    storage_queue_name = message_content["StorageQueueName"]
+    storage_blob_url = message_content["StorageBlobURL"]
+    storage_blob_container_name = message_content["StorageContainer"]
+    storage_table_url = message_content["StorageTableURL"]
+    storage_table_query_name = message_content["StorageTableQueryName"]
+    storage_table_process_name = message_content["StorageTableProcessName"]
+    table_names_and_columns = message_content["TableNamesColumns"]
+    start_datetime = message_content["StartDatetime"]
+    end_datetime = message_content["EndDatetime"]
+    query_row_limit = message_content["QueryRowLimit"]
+    query_row_limit_correction = message_content["QueryRowLimitCorrection"]
+    break_up_query_freq = message_content["BreakUpQueryFreq"]
+    storage_blob_output_format = message_content["StorageBlobOutputFormat"]
+    try:
+        results = query_log_analytics_send_to_queue(
+            query_uuid,
+            credential,
+            subscription_id,
+            resource_group_name,
+            log_analytics_worksapce_name,
+            log_analytics_workspace_id,
+            storage_queue_url,
+            storage_queue_name,
+            storage_blob_url,
+            storage_blob_container_name,
+            storage_table_url,
+            storage_table_query_name,
+            storage_table_process_name,
+            table_names_and_columns,
+            start_datetime,
+            end_datetime,
+            query_row_limit=query_row_limit,
+            query_row_limit_correction=query_row_limit_correction,
+            break_up_query_freq=break_up_query_freq,
+            storage_blob_output_format=storage_blob_output_format,
+        )
+        time_calculation = round(time.time() - start_time, 1)
+        logging.info("Success, Runtime: %s seconds", time_calculation)
+        result_response = {
+            "query_uuid": results["PartitionKey"],
+            "query_submit_status": results["Status"],
+            "table_names": results["Tables"],
+            "start_datetime": results["StartDatetime"],
+            "end_datetime": results["EndDatetime"],
+            "total_row_count": results["TotalRowCount"],
+            "subqueries_generated": results["MessagesGenerated"],
+            "subqueries_sent_to_queue": results["MessagesSentToQueue"],
+            "runtime_seconds": results["RuntimeSeconds"],
+            "query_submit_datetime": results["TimeGenerated"],
+        }
+        logging.info("Results: %s", result_response)
+    except Exception as e:
+        logging.error("Failed to process queue message: %s %s", message_content, e)
+        raise Exception(f"Failed to process queue message: {message_content}") from e
+
+
+@app.queue_trigger(
+    arg_name="msg",
+    queue_name=env_var_queue_process_name,
+    connection="storageAccountConnectionString",
+)
+def azure_queue_process(msg: func.QueueMessage) -> None:
+    """
+    Azure Function that triggers on messages in Process Queue
+    Processes query and exports to stroage account
+    """
+    logging.info("Python storage queue event triggered")
+    logging.info("Running azure_queue_process function...")
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
@@ -1788,17 +2047,79 @@ def azure_process_queue(msg: func.QueueMessage) -> None:
 
 @app.queue_trigger(
     arg_name="msg",
-    queue_name=storage_poison_queue_name,
+    queue_name=poison_queue_query_name,
     connection="storageAccountConnectionString",
 )
-def azure_process_poison_queue(msg: func.QueueMessage) -> None:
+def azure_queue_query_poison(msg: func.QueueMessage) -> None:
+    """
+    Azure Function that triggers on poisoned messages in Query Queue
+    Sends failure information to storage table log
+    """
     logging.info("Python storage queue event triggered")
-    logging.info("Running azure_process_poison_queue function...")
+    logging.info("Running azure_queue_query_poison function...")
     start_time = time.time()
     try:
         # validate message
         message = msg.get_json()
-        message_validation_check(message)
+        query_message_validation_check(message)
+        logging.info("Processing Message: %s", message)
+        # storage table connection for logging
+        # note: requires Storage Table Data Contributor role
+        storage_table_url = message["StorageTableURL"]
+        storage_table_name = message["StorageTableQueryName"]
+        table_client = TableClient(
+            storage_table_url, storage_table_name, credential=credential
+        )
+        # extract fields
+        query_uuid = message["QueryUUID"]
+        table_names_and_columns = message["TableNamesColumns"]
+        table_names_join = ", ".join(table_names_and_columns.keys())
+        start_datetime = message["StartDatetime"]
+        start_datetime = start_datetime.replace("T", " ").replace("Z", "")
+        end_datetime = message["EndDatetime"]
+        end_datetime = end_datetime.replace("T", " ").replace("Z", "")
+        # logging to storage table
+        time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
+        status = "Failed"
+        # generate unique row key
+        row_key = f"{query_uuid}__{status}__{table_names_join}__"
+        row_key += f"{start_datetime}__{end_datetime}"
+        unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
+        return_message = {
+            "PartitionKey": query_uuid,
+            "RowKey": unique_row_sha256_hash,
+            "Status": status,
+            "Tables": table_names_join,
+            "StartDatetime": start_datetime,
+            "EndDatetime": end_datetime,
+            "TimeGenerated": time_generated,
+        }
+        table_client.upsert_entity(return_message, mode=UpdateMode.REPLACE)
+        runtime_calculation = round(time.time() - start_time, 1)
+        logging.info("Success, Runtime: %s seconds", runtime_calculation)
+    except Exception as e:
+        message_body_decoded = msg.get_body().decode("utf-8")
+        logging.error("Invalid message: %s", message_body_decoded)
+        raise Exception("Failed, Invalid message") from e
+
+
+@app.queue_trigger(
+    arg_name="msg",
+    queue_name=poison_queue_process_name,
+    connection="storageAccountConnectionString",
+)
+def azure_queue_process_poison(msg: func.QueueMessage) -> None:
+    """
+    Azure Function that triggers on poisoned messages in Process Queue
+    Sends failure information to storage table log
+    """
+    logging.info("Python storage queue event triggered")
+    logging.info("Running azure_queue_process_poison function...")
+    start_time = time.time()
+    try:
+        # validate message
+        message = msg.get_json()
+        process_message_validation_check(message)
         logging.info("Processing Message: %s", message)
         # storage table connection for logging
         # note: requires Storage Table Data Contributor role
@@ -1809,7 +2130,6 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
         )
         # extract fields
         query_uuid = message["QueryUUID"]
-        sub_query_index = message["SubQuery"]
         table_name = message["Table"]
         start_datetime = message["StartDatetime"]
         start_datetime = start_datetime.replace("T", " ").replace("Z", "")
@@ -1826,7 +2146,6 @@ def azure_process_poison_queue(msg: func.QueueMessage) -> None:
         return_message = {
             "PartitionKey": query_uuid,
             "RowKey": unique_row_sha256_hash,
-            "SubQuery": sub_query_index,
             "Status": status,
             "Table": table_name,
             "StartDatetime": start_datetime,
