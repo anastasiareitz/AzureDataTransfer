@@ -173,7 +173,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 This query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
 
-<b>3. Execute HTTP trigger <b>azure_get_query_status()</b> with query uuid:</b>
+<b>3. Execute HTTP trigger <b>azure_get_status()</b> with query uuid:</b>
 
 - HTTP POST Request Body Example:
   
