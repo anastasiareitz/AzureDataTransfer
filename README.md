@@ -44,7 +44,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 5. <b>Storage Blob Data Contributor</b>: Upload to Blob Storage
 6. <b>Storage Table Data Contributor</b>: Logging
 
-<b>Required Environment Varisables for Queue Triggers via Managed Identity</b>: 
+<b>Required Environment Variables for Queue Triggers via Managed Identity</b>: 
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 2. <b>storageAccountConnectionString__credential</b> -> managedidentity
@@ -223,10 +223,10 @@ This query will be split into sub-queries and saved as messages in a queue, whic
 
 1.4.0:
 - refactored code and made pylint edits
-- changed logging to % formating from f-strings
+- changed logging to % formatting from f-strings
 
 1.3.1:
-- Fixed UTC timezone bug
+- Fixed UTC time zone bug
 - Added estimated time remaining to get_status() response
 - Added option to put storage queue and table params in env variables
 
