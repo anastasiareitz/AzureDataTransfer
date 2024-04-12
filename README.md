@@ -188,6 +188,7 @@ This query will be split into sub-queries and saved as messages in a queue, whic
 ```json
 {
     "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "query_partitions" : 1,
     "submit_status": "Success",
     "processing_status": "Partial",
     "percent_complete": 29.5,
