@@ -14,7 +14,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 1. <b>azure_ingest_test_data()</b>: HTTP Trigger, creates and ingests test data (optional)
 2. <b>azure_submit_query()</b>: HTTP Trigger, submits single query that is split into smaller queries/jobs and sends to queue
 3. <b>azure_submit_queries()</b>: HTTP Trigger, breaks up initial query and submits multiple queries in parallel
-4. <b>azure_get_query_status()</b>: HTTP Trigger, gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
+4. <b>azure_get_status()</b>: HTTP Trigger, gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
   
 ## Files
 
