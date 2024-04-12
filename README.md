@@ -17,7 +17,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 4. <b>azure_get_status()</b>: gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
 
 <b>Azure Queue Functions</b>:
-1. <b>azure_queue_query()</b>: partitions or splits query into small queries and saves to queue
+1. <b>azure_queue_query()</b>: processes split queries
 2. <b>azure_queue_process()</b>: processes subqueries and saves output to storage blobs 
 3. <b>azure_queue_query_poison()</b>: processes invalid messages in query queue and saves to table log
 4. <b>azure_queue_process_poison()</b>: processes invalid message in process queue and saves to table log
