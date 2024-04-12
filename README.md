@@ -59,16 +59,16 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 <b>Azure Storage Setup</b>:
 1. Create 1 container for data output files
-2. Create 4 queues for messages/jobs
+   - <STORAGE_CONTAINER_NAME>
+3. Create 4 queues for messages/jobs
    - <STORAGE_QUEUE_NAME_FOR_QUERIES>
    - <STORAGE_QUEUE_NAME_FOR_PROCESSING>
    - <STORAGE_QUEUE_NAME_FOR_QUERIES>-poison for failed messages
    - <STORAGE_QUEUE_NAME_FOR_PROCESSING>-poison for failed messages
-
 5. Create 3 tables for logging (i.e. ingestlog, querylog, and processlog)
-   - <INGEST_LOG_NAME>
-   - <QUERY_LOG_NAME>
-   - <PROCESS_LOG_NAME>
+   - <STORAGE_TABLE_INGEST_LOG_NAME>
+   - <STORAGE_TABLE_QUERY_LOG_NAME>
+   - <STORAGE_TABLE_PROCESS_LOG_NAME>
 
 <b>Queue Trigger Setup:</b>:
 - To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
@@ -136,8 +136,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 ```
 
 - HTTP Response Examples:
-
-azure_submit_queries()
+    - azure_submit_queries()
 
 ```json
 {
@@ -154,7 +153,8 @@ azure_submit_queries()
 }
 ```
 
-azure_submit_query()
+- HTTP Response Examples:
+    - azure_submit_query()
 
 ```json
 {
@@ -171,7 +171,7 @@ azure_submit_query()
 }
 ```
 
-The query will be split into chunks and then saved as messages in a queue, which will be automatically processed in parallel and results sent to a storage account container. 
+This query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
 
 <b>3. Execute HTTP trigger <b>azure_get_query_status()</b> with query uuid:</b>
 
