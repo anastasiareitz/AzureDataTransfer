@@ -127,6 +127,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
 5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
 
+<b>Security Settings</b>:
+1. Restrict Azure Function App and/or APIM to specific IP address range(s)
+
 ## Usage
 
 <b>1. Execute HTTP trigger <b>azure_submit_queries()</b> or <b>azure_submit_query()</b> with query and connection parameters:</b>
