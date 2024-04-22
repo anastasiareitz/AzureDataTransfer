@@ -83,13 +83,13 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 <b>API Management Setup:</b>
 - Note: API management is used for interactive Swagger documenation
-1. Create API Management Service -> Consumption Pricing Tier
-2. Add API -> Function App
+1. Create API Management Service -> Consumption Pricing Tier 
+2. Add new API -> Function App 
    - Function App: <YOUR_FUNCTION>
    - Display Name: Protected API Calls
    - Name: protected-api-calls
    - Suffix: api
-3. Remove all operations besides POST
+3. Remove all operations besides POST 
    - Edit POST operation 
       - Display name: azure_ingest_test_data
       - URL: POST /azure_ingest_test_data
@@ -103,7 +103,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
       - Display name: azure_ingest_test_data
       - URL: POST /azure_ingest_test_data
    - Edit OpenAPI spec json operation ids to match above
-4.. Add API -> Function App
+4. Add new API -> Function App
    - Function App: <YOUR_FUNCTION>
    - Display Name: Public Docs
    - Name: public-docs
