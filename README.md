@@ -51,14 +51,14 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 5. <b>Storage Blob Data Contributor</b>: Upload to Blob Storage
 6. <b>Storage Table Data Contributor</b>: Logging
 
-<b>Required Environment Variables for Queue Triggers via Managed Identity</b>: 
+<b>Environment Variables for Queue Triggers via Managed Identity</b>: 
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>storageAccountConnectionString__queueServiceUri</b> -> https://<STORAGE_ACCOUNT>.queue.core.windows.net/
 2. <b>storageAccountConnectionString__credential</b> -> managedidentity
 3. <b>QueueQueryName</b> -> <STORAGE_QUEUE_NAME_FOR_QUERIES>
 4. <b>QueueProcessName</b> -> <STORAGE_QUEUE_NAME_FOR_PROCESSING>
 
-<b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
+<b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest (optional)</b>:
 1. Azure Portal -> Monitor -> Create Data Collection Endpoint
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
 3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
@@ -81,9 +81,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
 
-<b>API Management Setup:</b>
-- Note: API management is used for interactive Swagger documenation
-1. Create API Management Service -> Consumption Pricing Tier 
+<b>API Management (APIM) Setup:</b>
+- Note: APIM is used to display interactive Swagger/OpenAPI docs
+1. Create APIM Service -> Consumption Pricing Tier (do not select developer) 
 2. Add new API -> Function App 
    - Function App: <YOUR_FUNCTION>
    - Display Name: Protected API Calls
@@ -235,14 +235,16 @@ This query will be split into sub-queries and saved as messages in a queue, whic
 ## Changelog
 
 2.0.0:
-- changed to FastAPI in order to use Swager interactive docs
+- Changed Azure Function code to use FastAPI in order to use Swagger docs
+- Added pydantic input/output JSON schemas
+- Updated documentation
 
 1.5.0:
-- added azure_submit_queries() function for larger datetime ranges and parallel processing
+- Added azure_submit_queries() function for larger datetime ranges and parallel processing
 
 1.4.0:
-- refactored code and made pylint edits
-- changed logging to % formatting from f-strings
+- Refactored code and made pylint edits
+- Changed logging to % formatting from f-strings
 
 1.3.1:
 - Fixed UTC time zone bug
