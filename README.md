@@ -82,42 +82,42 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
 
 <b>API Management Setup:</b>
-- API management is used to use interactive Swagger documenation
-- Create API Management Service -> Consumption Pricing Tier
-1. Add API -> Function App
-- Function App: <YOUR_FUNCTION>
-- Display Name: Protected API Calls
-- Name: protected-api-calls
-- Suffix: api
-- Remove all operations besides POST
-- Edit POST operation 
-    - Display name: azure_ingest_test_data
-    - URL: POST /azure_ingest_test_data
-- Clone and Edit new POST operation 
-    - Display name: azure_ingest_test_data
-    - URL: POST /azure_ingest_test_data
-- Clone and Edit new POST operation 
-    - Display name: azure_ingest_test_data
-    - URL: POST /azure_ingest_test_data
-- Clone and Edit new POST operation 
-    - Display name: azure_ingest_test_data
-    - URL: POST /azure_ingest_test_data
-- Edit OpenAPI spec json operation ids to match above
+- Note: API management is used for interactive Swagger documenation
+1. Create API Management Service -> Consumption Pricing Tier
 2. Add API -> Function App
-    - Function App: <YOUR_FUNCTION>
-    - Display Name: Public Docs
-    - Name: public-docs
-    - Suffix: public
-- Remove all operations besides GET
-- Settings -> uncheck 'subscription required'
-- Edit GET operation
-    - Display name: Documentation
-    - URL: GET /docs
-- Clone and Edit new GET operation
-    - Display name: OpenAPI Schema
-    - URL: GET /openapi.json
-- Edit OpenAPI spec json operation ids to match above
-- Test at https://<APIM_NAME>.azure-api.net/public/docs
+   - Function App: <YOUR_FUNCTION>
+   - Display Name: Protected API Calls
+   - Name: protected-api-calls
+   - Suffix: api
+3. Remove all operations besides POST
+   - Edit POST operation 
+      - Display name: azure_ingest_test_data
+      - URL: POST /azure_ingest_test_data
+   - Clone and Edit new POST operation 
+      - Display name: azure_ingest_test_data
+      - URL: POST /azure_ingest_test_data
+   - Clone and Edit new POST operation 
+      - Display name: azure_ingest_test_data
+      - URL: POST /azure_ingest_test_data
+   - Clone and Edit new POST operation 
+      - Display name: azure_ingest_test_data
+      - URL: POST /azure_ingest_test_data
+   - Edit OpenAPI spec json operation ids to match above
+4.. Add API -> Function App
+   - Function App: <YOUR_FUNCTION>
+   - Display Name: Public Docs
+   - Name: public-docs
+   - Suffix: public
+5. Remove all operations besides GET
+   - Settings -> uncheck 'subscription required'
+   - Edit GET operation
+      - Display name: Documentation
+      - URL: GET /docs
+   - Clone and Edit new GET operation
+      - Display name: OpenAPI Schema
+      - URL: GET /openapi.json
+   - Edit OpenAPI spec json operation ids to match above
+   - Test at https://<APIM_NAME>.azure-api.net/public/docs
 
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
