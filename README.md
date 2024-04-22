@@ -2,13 +2,13 @@
 
 ## Summary
 
-This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption (Serverless) hosting plan.
+This Azure Function App using FastAPI enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption (Serverless) hosting plan.
 
-This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466)
+This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466) and [FastAPI on Azure Functions](https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html)
 
 <b>Inputs and Outputs</b>:
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
-- <b>Output</b>: JSON (list, line delimited), CSV, or PARQUET files
+- <b>Output</b>: JSON (list format, line delimited), CSV, or PARQUET files
 
 <b>Azure HTTP Functions</b>:
 1. <b>azure_ingest_test_data()</b>: creates and ingests test data (optional)
@@ -30,18 +30,17 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - <b>function_app.py</b>: Azure Function App python source code
 - <b>host.json</b>: Azure Function App settings
 - <b>requirements.txt</b>: python package requirements file
-- <b>open_api.yaml</b>: Open API spec
 
 ## Setup Notes
 
-<b>Azure Resources</b>:
+<b>Create the Following Azure Resources</b>:
 1. Log Analytics Workspace (data source)
 2. Storage Account
 - Container (data output destination)
 - Queues (temp storage for split query messages/jobs)
 - Tables (logging for status checks)
 3. Azure Function App (Python 3.11+, consumption or premium plan)
-4. Azure API Management (frontend user interface, optional) (alternative: Azure Function or Web App Service to host Flask/FastAPI)
+4. Azure API Management
 
 <b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
 - Setup via Azure Portal -> Function App -> Identity -> System Assigned -> On -> Azure Role Assignments
@@ -82,6 +81,44 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
 
+<b>API Management Setup:</b>
+- API management is used to use interactive Swagger documenation
+- Create API Management Service -> Consumption Pricing Tier
+1. Add API -> Function App
+- Function App: <YOUR_FUNCTION>
+- Display Name: Protected API Calls
+- Name: protected-api-calls
+- Suffix: api
+- Remove all operations besides POST
+- Edit POST operation 
+    - Display name: azure_ingest_test_data
+    - URL: POST /azure_ingest_test_data
+- Clone and Edit new POST operation 
+    - Display name: azure_ingest_test_data
+    - URL: POST /azure_ingest_test_data
+- Clone and Edit new POST operation 
+    - Display name: azure_ingest_test_data
+    - URL: POST /azure_ingest_test_data
+- Clone and Edit new POST operation 
+    - Display name: azure_ingest_test_data
+    - URL: POST /azure_ingest_test_data
+- Edit OpenAPI spec json operation ids to match above
+2. Add API -> Function App
+    - Function App: <YOUR_FUNCTION>
+    - Display Name: Public Docs
+    - Name: public-docs
+    - Suffix: public
+- Remove all operations besides GET
+- Settings -> uncheck 'subscription required'
+- Edit GET operation
+    - Display name: Documentation
+    - URL: GET /docs
+- Clone and Edit new GET operation
+    - Display name: OpenAPI Schema
+    - URL: GET /openapi.json
+- Edit OpenAPI spec json operation ids to match above
+- Test at https://<APIM_NAME>.azure-api.net/public/docs
+
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
@@ -89,43 +126,10 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. <b>TableIngestName</b> -> <STORAGE_TABLE_INGEST_LOG_NAME>
 4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
 5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
-  
+
 ## Usage
 
-<b>1. (Optional) Execute HTTP trigger <b>azure_ingest_test_data()</b> to generate test/fake data and ingest into Log Analytics:</b>
-
-- HTTP POST Request Body Example:
-
-```json
-{
-    "log_analytics_data_collection_endpoint" : "https://XXXXXXXXXXXXXX-XXXXXXX.XXXXXX.ingest.monitor.azure.com",
-    "log_analytics_data_collection_rule_id" : "dcr-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-    "log_analytics_data_collection_stream_name" : "Custom-XXXXXXXXXXXXXXXX_CL",
-    "start_datetime" : "2024-03-26 00:00:00.000000",
-    "timedelta_seconds" : 0.00036,
-    "number_of_rows" : 1000000
-}
-```
-
-- HTTP Response Example:
-
-```json
-{
-    "ingest_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "ingest_status": "Success",
-    "table_stream_name": "Custom-XXXXXXXXXXXXXX_CL",
-    "start_datetime": "2024-03-26 00:00:00.000000",
-    "end_datetime": "2024-03-26 00:05:59.999640",
-    "number_of_columns": 10,
-    "rows_generated": 1000000,
-    "rows_ingested": 1000000,
-    "valid_datetime_range": true,
-    "runtime_seconds": 59.1,
-    "ingest_datetime": "2024-03-26 16:21:24.220491"
-}
-```
-
-<b>2. Execute HTTP trigger <b>azure_submit_queries()</b> or <b>azure_submit_query()</b> with query and connection parameters:</b>
+<b>1. Execute HTTP trigger <b>azure_submit_queries()</b> or <b>azure_submit_query()</b> with query and connection parameters:</b>
 
 - HTTP POST Request Body Example:
 
@@ -181,7 +185,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 This query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
 
-<b>3. Execute HTTP trigger <b>azure_get_status()</b> with query uuid:</b>
+<b>2. Execute HTTP trigger <b>azure_get_status()</b> with query uuid:</b>
 
 - HTTP POST Request Body Example:
   
@@ -220,12 +224,15 @@ This query will be split into sub-queries and saved as messages in a queue, whic
 
 2. Submit Query function exceeds 10 min limit and fails
    - Use azure_submit_queries() function 
-   - Reduce the datetime range of the query (recommendation is less than 100M records)
+   - Reduce the datetime range of the query (recommend less than 100M records)
    - Decrease break_up_query_freq value in azure_submit_query()
    - Decrease parallel_process_break_up_query_freq value in azure_submit_queries()
    - Use Premium or Dedicated Plan with no time limit
 
 ## Changelog
+
+2.0.0:
+- changed to FastAPI in order to use Swager interactive docs
 
 1.5.0:
 - added azure_submit_queries() function for larger datetime ranges and parallel processing
