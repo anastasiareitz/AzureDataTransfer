@@ -125,6 +125,10 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
    - Edit OpenAPI spec json operation ids to match above
    - Test at https://<APIM_NAME>.azure-api.net/public/docs
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a98fc860-7bd7-4e15-9466-4863ddc1e18c)
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/8023a5f6-2e3d-4e70-9559-bb20de70ee59)
+
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
