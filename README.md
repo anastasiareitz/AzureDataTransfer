@@ -94,14 +94,18 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
       - Display name: azure_ingest_test_data
       - URL: POST /azure_ingest_test_data
    - Clone and Edit new POST operation 
-      - Display name: azure_ingest_test_data
-      - URL: POST /azure_ingest_test_data
+      - Display name: azure_submit_query
+      - URL: POST /azure_submit_query
    - Clone and Edit new POST operation 
-      - Display name: azure_ingest_test_data
-      - URL: POST /azure_ingest_test_data
+      - Display name: azure_submit_query_parallel
+      - URL: POST /azure_submit_query_parallel
    - Clone and Edit new POST operation 
-      - Display name: azure_ingest_test_data
-      - URL: POST /azure_ingest_test_data
+      - Display name: azure_get_status
+      - URL: POST /azure_get_status
+   - Clone azure_get_status operation
+      - Change from POST to GET
+      - Display name: azure_get_status
+      - URL: GET /azure_get_status
    - Edit OpenAPI spec json operation ids to match above
 4. Add new API -> Function App
    - Function App: <YOUR_FUNCTION>
