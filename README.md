@@ -6,8 +6,6 @@ This Azure Function App using FastAPI enables the export of big data (10M+ recor
 
 This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466) and [FastAPI on Azure Functions](https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/462dbcbb-9d1f-4db1-8dfa-412a177d1ce0)
-
 <b>Inputs and Outputs</b>:
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
 - <b>Output</b>: JSON (list format, line delimited), CSV, or PARQUET files
@@ -25,7 +23,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 4. <b>azure_queue_process_poison()</b>: processes invalid message in process queue and saves to table log
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3bf68e1a-f300-4501-a5ce-94f142596876)
-  
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/f83625ff-f935-4255-9f69-1ebb8b72be24)
+
 ## Files
 
 - <b>azure-log-analytics-data-export.ipynb</b>: python notebook for development, testing, or interactive use
