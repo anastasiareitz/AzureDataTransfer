@@ -22,7 +22,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. <b>azure_queue_query_poison()</b>: processes invalid messages in query queue and saves to table log
 4. <b>azure_queue_process_poison()</b>: processes invalid message in process queue and saves to table log
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a018ec7c-c252-462c-8330-9b240feccb9f)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3bf68e1a-f300-4501-a5ce-94f142596876)
   
 ## Files
 
