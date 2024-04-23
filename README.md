@@ -13,7 +13,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 <b>Azure HTTP Functions</b>:
 1. <b>azure_ingest_test_data()</b>: creates and ingests test data (optional)
 2. <b>azure_submit_query()</b>: submits single query that is split into smaller queries/jobs and sends to queue
-3. <b>azure_submit_queries()</b>: breaks up initial query and submits multiple queries in parallel
+3. <b>azure_submit_query_parallel()</b>: breaks up initial query and submits multiple queries in parallel
 4. <b>azure_get_status()</b>: gives high-level status of query (number of sub-queries, successes, failures, row counts, file sizes)
 
 <b>Azure Queue Functions</b>:
@@ -82,7 +82,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 - Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
 
 <b>API Management (APIM) Setup:</b>
-- Note: APIM is used to display interactive Swagger/OpenAPI docs
+- Note: APIM is used to access the FastAPI Swagger/OpenAPI docs
 1. Create APIM Service -> Consumption Pricing Tier (do not select developer) 
 2. Add new API -> Function App 
    - Function App: <YOUR_FUNCTION>
@@ -128,11 +128,11 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
 
 <b>Security Settings</b>:
-1. Restrict Azure Function App and/or APIM to specific IP address range(s)
+1. Restrict Azure Function App and APIM to specific IP address range(s)
 
 ## Usage
 
-<b>1. Execute HTTP trigger <b>azure_submit_queries()</b> or <b>azure_submit_query()</b> with query and connection parameters:</b>
+<b>1. Execute HTTP trigger <b>azure_submit_query()</b> or <b>azure_submit_query_parallel()</b>:</b>
 
 - HTTP POST Request Body Example:
 
@@ -147,24 +147,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "table_names_and_columns" : { "XXXXXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
     "start_datetime" : "2024-03-19 00:00:00",
     "end_datetime" : "2024-03-20 00:00:00"
-}
-```
-
-- HTTP Response Examples:
-    - azure_submit_queries()
-
-```json
-{
-    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-    "split_status": "Success",
-    "table_names": "XXXXXXXXXXX_CL",
-    "start_datetime": "2024-04-04 00:00:00.000000",
-    "end_datetime": "2024-04-10 00:00:00.000000",
-    "number_of_messages_generated": 6,
-    "number_of_messages_sent": 6,
-    "total_row_count": 2010000,
-    "runtime_seconds": 0.9,
-    "split_datetime": "2024-04-12 14:06:41.688752"
 }
 ```
 
@@ -185,8 +167,25 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "submit_datetime": "2024-03-26 16:24:38.771336"
 }
 ```
+- HTTP Response Examples:
+    - azure_submit_query_parallel()
 
-This query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
+```json
+{
+    "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+    "split_status": "Success",
+    "table_names": "XXXXXXXXXXX_CL",
+    "start_datetime": "2024-04-04 00:00:00.000000",
+    "end_datetime": "2024-04-10 00:00:00.000000",
+    "number_of_messages_generated": 6,
+    "number_of_messages_sent": 6,
+    "total_row_count": 2010000,
+    "runtime_seconds": 0.9,
+    "split_datetime": "2024-04-12 14:06:41.688752"
+}
+```
+
+The query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
 
 <b>2. Execute HTTP trigger <b>azure_get_status()</b> with query uuid:</b>
 
@@ -225,17 +224,17 @@ This query will be split into sub-queries and saved as messages in a queue, whic
    - Manually restart Azure Function App in Azure Portal
    - Use Premium or Dedicated Plan
 
-2. Submit Query function exceeds 10 min limit and fails
-   - Use azure_submit_queries() function 
+2. Submit exceed 10 min Azure Function limit and fails
+   - Use azure_submit_query_parallel() function 
    - Reduce the datetime range of the query (recommend less than 100M records)
    - Decrease break_up_query_freq value in azure_submit_query()
-   - Decrease parallel_process_break_up_query_freq value in azure_submit_queries()
+   - Decrease parallel_process_break_up_query_freq value in azure_submit_query_parallel()
    - Use Premium or Dedicated Plan with no time limit
 
 ## Changelog
 
 2.0.0:
-- Changed Azure Function code to use FastAPI in order to use Swagger docs
+- Changed Azure Function code to use FastAPI in order to use Swagger UI
 - Added pydantic input/output JSON schemas
 - Updated documentation
 
