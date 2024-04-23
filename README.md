@@ -24,8 +24,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3bf68e1a-f300-4501-a5ce-94f142596876)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/765b9316-370d-49a4-a5d1-f29f1a701115)
-
 ## Files
 
 - <b>azure-log-analytics-data-export.ipynb</b>: python notebook for development, testing, or interactive use
@@ -127,7 +125,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a98fc860-7bd7-4e15-9466-4863ddc1e18c)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/8023a5f6-2e3d-4e70-9559-bb20de70ee59)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/765b9316-370d-49a4-a5d1-f29f1a701115)
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3c7651fa-cb89-460c-8632-6bf94a60b177)
 
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
