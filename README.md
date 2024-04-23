@@ -24,7 +24,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3bf68e1a-f300-4501-a5ce-94f142596876)
 
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/f83625ff-f935-4255-9f69-1ebb8b72be24)
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/765b9316-370d-49a4-a5d1-f29f1a701115)
 
 ## Files
 
