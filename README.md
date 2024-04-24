@@ -24,6 +24,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3bf68e1a-f300-4501-a5ce-94f142596876)
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3c7651fa-cb89-460c-8632-6bf94a60b177)
+
 ## Files
 
 - <b>azure-log-analytics-data-export.ipynb</b>: python notebook for development, testing, or interactive use
@@ -60,8 +62,10 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. <b>QueueQueryName</b> -> <STORAGE_QUEUE_NAME_FOR_QUERIES>
 4. <b>QueueProcessName</b> -> <STORAGE_QUEUE_NAME_FOR_PROCESSING>
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/b0c4ce1c-affe-45bd-b9cf-f2db5ef398ae)
+
 <b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest (optional)</b>:
-1. Azure Portal -> Monitor -> Create Data Collection Endpoint
+1. Azure Portal -> Monitor -> Data Collection Endpoints -> Create
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
 3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
 ](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
@@ -123,13 +127,11 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
       - Display name: OpenAPI Schema
       - URL: GET /openapi.json
    - Edit OpenAPI spec json operation ids to match above
-   - Test at https://<APIM_NAME>.azure-api.net/public/docs
+   - Test at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a98fc860-7bd7-4e15-9466-4863ddc1e18c)
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/765b9316-370d-49a4-a5d1-f29f1a701115)
-
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3c7651fa-cb89-460c-8632-6bf94a60b177)
 
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
@@ -139,14 +141,21 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
 5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/9d2613e3-6d11-4069-88df-2fbef6db74bb)
+
 <b>Security Settings</b>:
 1. Restrict Azure Function App and APIM to specific IP address range(s)
+- Networking -> Public Access -> Select Virtual Networks or IPs
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a0c83909-4136-4f8b-a1c1-498d157cb4ba)
 
 ## Usage
 
-<b>1. Execute HTTP trigger <b>azure_submit_query()</b> or <b>azure_submit_query_parallel()</b>:</b>
+Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 
-- HTTP POST Request Body Example:
+1. <b>azure_submit_query()</b> or <b>azure_submit_query_parallel()</b>:
+
+- HTTP POST Example:
 
 ```json
 {
@@ -164,6 +173,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 - HTTP Response Examples:
     - azure_submit_query()
+    - azure_submit_query_parallel()
 
 ```json
 {
@@ -179,8 +189,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
     "submit_datetime": "2024-03-26 16:24:38.771336"
 }
 ```
-- HTTP Response Examples:
-    - azure_submit_query_parallel()
 
 ```json
 {
@@ -197,11 +205,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 }
 ```
 
-The query will be split into sub-queries and saved as messages in a queue, which will be automatically processed in parallel and sent to a storage account container. 
+2. <b>azure_get_status()</b>:
 
-<b>2. Execute HTTP trigger <b>azure_get_status()</b> with query uuid:</b>
-
-- HTTP POST Request Body Example:
+- HTTP POST Request Example:
   
 ```json
 {
