@@ -240,6 +240,9 @@ The query will be split into sub-queries and saved as messages in a queue, which
    - Decrease break_up_query_freq value in azure_submit_query()
    - Decrease parallel_process_break_up_query_freq value in azure_submit_query_parallel()
    - Use Premium or Dedicated Plan with no time limit
+  
+3. Table row count values exceeding 2,147,483,647
+   - Change type from int32 to int64
 
 ## Changelog
 
