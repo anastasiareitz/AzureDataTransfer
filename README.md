@@ -244,7 +244,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 }
 ```
 
-## Issues
+## Known Issues
 
 1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
    - Manually restart Azure Function App in Azure Portal
