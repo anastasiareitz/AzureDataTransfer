@@ -40,9 +40,9 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 2. Storage Account
 - Container (data output destination)
 - Queues (temp storage for split query messages/jobs)
-- Tables (logging for status checks)
-3. Azure Function App (Python 3.11+, consumption or premium plan)
-4. Azure API Management
+- Tables (logging)
+3. Azure Function App (Python 3.11+, consumption or premium)
+4. Azure API Management (consumption)
 
 <b>Authentication (Managed Identity or Service Principal) Roles Setup</b>:
 - Azure Portal -> Function App -> Identity -> System Assigned -> On -> Add Azure Role Assignments
@@ -106,7 +106,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
       - Display name: azure_submit_query_parallel
       - URL: POST /azure_submit_query_parallel
    - Clone and Edit new POST operation 
-      - Display name: azure_get_status
+      - Display name: azure_get_status_post
       - URL: POST /azure_get_status
    - Clone azure_get_status operation
       - Change from POST to GET
