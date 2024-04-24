@@ -155,6 +155,11 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 ## Usage
 
 Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
+- API calls require a APIM subscription key
+- APIM -> Subscription -> Create Subscription -> Copy Key
+- Paste in "Ocp-Apim-Subscription-Key" header field 
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/b8b0096a-9b7f-4318-bdd0-061e29a8826a)
 
 1. <b>azure_submit_query()</b> or <b>azure_submit_query_parallel()</b>:
 
