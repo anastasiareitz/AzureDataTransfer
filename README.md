@@ -26,6 +26,8 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/3c7651fa-cb89-460c-8632-6bf94a60b177)
 
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/bd175a25-de96-484d-a9cc-81dc9e6024a3)
+
 ## Files
 
 - <b>azure-log-analytics-data-export.ipynb</b>: python notebook for development, testing, or interactive use
