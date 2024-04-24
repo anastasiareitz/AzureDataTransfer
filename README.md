@@ -4,7 +4,7 @@
 
 ## Summary
 
-This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and APIM. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption hosting plan.
+This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and API Management. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption hosting plan.
 
 <b>Inputs and Outputs</b>:
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
