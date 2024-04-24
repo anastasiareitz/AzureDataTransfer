@@ -42,7 +42,10 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - Queues (temp storage for split query messages/jobs)
 - Tables (logging)
 3. Azure Function App (Python 3.11+, consumption or premium)
-4. Azure API Management (consumption)
+- Clone this repo, use VS Code, install Azure Functions tools/extension, deploy to Azure subscription
+- Reference: [Create a function in Azure with Python using Visual Studio Code
+](https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-vs-code-python?pivots=python-mode-decorators)
+4. Azure API Management (consumption, do not use developer)
 
 <b>Authentication (Managed Identity or Service Principal) Roles Setup</b>:
 - Azure Portal -> Function App -> Identity -> System Assigned -> On -> Add Azure Role Assignments
