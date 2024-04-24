@@ -64,12 +64,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/b0c4ce1c-affe-45bd-b9cf-f2db5ef398ae)
 
-<b>Data Collection Endpoint and Rule Setup for Log Analytics Ingest (optional)</b>:
-1. Azure Portal -> Monitor -> Data Collection Endpoints -> Create
-2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
-3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
-](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
-
 <b>Azure Storage Setup</b>:
 1. Create 1 container for data output files
    - <STORAGE_CONTAINER_NAME>
@@ -82,10 +76,6 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
    - <STORAGE_TABLE_INGEST_LOG_NAME>
    - <STORAGE_TABLE_QUERY_LOG_NAME>
    - <STORAGE_TABLE_PROCESS_LOG_NAME>
-
-<b>Queue Trigger Setup:</b>:
-- To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
-- Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
 
 <b>API Management (APIM) Setup:</b>
 - Note: APIM is used to access the FastAPI Swagger/OpenAPI docs
@@ -133,6 +123,16 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/765b9316-370d-49a4-a5d1-f29f1a701115)
 
+<b>Queue Trigger Setup:</b>:
+- To fix message encoding errors (default is base64), add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
+- Note: Failed messages/jobs are sent to <QUEUE_NAME>-poison
+
+<b>Optional Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
+1. Azure Portal -> Monitor -> Data Collection Endpoints -> Create
+2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
+3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
+](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
+
 <b>Optional Environment Variables (reduces number of params in requests)</b>:
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
 1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
@@ -143,7 +143,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/9d2613e3-6d11-4069-88df-2fbef6db74bb)
 
-<b>Security Settings</b>:
+<b>Optional Security Settings</b>:
 1. Restrict Azure Function App and APIM to specific IP address range(s)
 - Networking -> Public Access -> Select Virtual Networks or IPs
 
