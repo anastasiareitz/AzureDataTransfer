@@ -10,6 +10,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from io import BytesIO, StringIO
+from typing import Annotated
 
 import azure.functions as func
 import pandas as pd
@@ -19,6 +20,7 @@ from azure.monitor.ingestion import LogsIngestionClient
 from azure.monitor.query import LogsQueryClient, LogsQueryStatus
 from azure.storage.blob import ContainerClient
 from azure.storage.queue import QueueClient, QueueMessage
+from fastapi import FastAPI, HTTPException, Body, Header, Query
 from pydantic import BaseModel, Field
 
 # pyarrow required for pandas parquet output, check without importing
@@ -27,7 +29,18 @@ for each_package in check_packages_installed:
     if not importlib.util.find_spec(each_package):
         raise Exception(f"Failed to import package: {each_package}")
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+# fastapi settings for Azure Functions and API Management
+# reference: https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html
+# /api will require a subscription key
+# /public/docs will not require a subscription key
+fastapi_app = FastAPI(
+    servers=[{"url": "/api", "description": "API"}],
+    root_path="/public",
+    root_path_in_servers=False,
+    title="Azure Log Analytics Data Export API",
+    swagger_ui_parameters={"defaultModelsExpandDepth": 0},
+)
+app = func.AsgiFunctionApp(app=fastapi_app, http_auth_level=func.AuthLevel.FUNCTION)
 
 # azure auth via managed identity
 # Azure Portal -> Function App -> Identity -> System Assigned
@@ -1269,6 +1282,13 @@ def get_and_process_table_results(
     storage_table_process_name: str,
     query_uuid: str,
 ) -> dict[str, pd.DataFrame]:
+    cols_to_rename = {"PartitionKey": "QueryUUID"}
+    return_dfs = {
+        "query_results_df": pd.DataFrame(),
+        "process_results_df": pd.DataFrame(),
+        "success_process_results_df": pd.DataFrame(),
+        "failed_process_results_df": pd.DataFrame(),
+    }
     # table connections
     table_client_query = TableClient(
         storage_table_url, storage_table_query_name, credential=credential
@@ -1281,29 +1301,29 @@ def get_and_process_table_results(
     query_results = table_client_query.query_entities(search_odata_string)
     process_results = table_client_process.query_entities(search_odata_string)
     # query results
-    cols_to_rename = {"PartitionKey": "QueryUUID"}
     query_results_df_raw = pd.DataFrame(query_results)
     if query_results_df_raw.shape[0] == 0:
-        raise Exception("Query UUID not found in query logs")
-    query_results_df = query_results_df_raw.rename(columns=cols_to_rename)
+        logging.info("Query UUID %s not found in query logs", query_uuid)
+        return return_dfs
+    else:
+        query_results_df = query_results_df_raw.rename(columns=cols_to_rename)
+        return_dfs["query_results_df"] = query_results_df
     # process results
     process_results_df_raw = pd.DataFrame(process_results)
     if process_results_df_raw.shape[0] == 0:
-        raise Exception("Query UUID not found in process logs")
-    process_results_df = process_results_df_raw.rename(columns=cols_to_rename)
-    # split
-    success_mask = process_results_df.Status == "Success"
-    success_process_results_df = process_results_df.loc[success_mask]
-    failed_mask = process_results_df.Status == "Failed"
-    failed_process_results_df = process_results_df.loc[failed_mask]
-    # return results
-    return_dfs = {
-        "query_results_df": query_results_df,
-        "process_results_df": process_results_df,
-        "success_process_results_df": success_process_results_df,
-        "failed_process_results_df": failed_process_results_df,
-    }
-    return return_dfs
+        logging.info("Query UUID %s not found in process logs", query_uuid)
+        return return_dfs
+    else:
+        process_results_df = process_results_df_raw.rename(columns=cols_to_rename)
+        return_dfs["process_results_df"] = process_results_df
+        # split
+        success_mask = process_results_df.Status == "Success"
+        failed_mask = process_results_df.Status == "Failed"
+        success_process_results_df = process_results_df.loc[success_mask]
+        failed_process_results_df = process_results_df.loc[failed_mask]
+        return_dfs["success_process_results_df"] = success_process_results_df
+        return_dfs["failed_process_results_df"] = failed_process_results_df
+        return return_dfs
 
 
 def calculate_runtime_since_query_submit(
@@ -1318,7 +1338,7 @@ def calculate_runtime_since_query_submit(
     process_results_df_copy["TimeGenerated"] = pd.to_datetime(
         process_results_df_copy.TimeGenerated
     )
-    # calcualte difference between first submit and last processed log
+    # calculate difference between first submit and last processed log
     query_submit_datetime = query_results_df_copy["TimeGenerated"].min()
     last_processing_datetime = process_results_df_copy["TimeGenerated"].max()
     time_since_query = last_processing_datetime - query_submit_datetime
@@ -1419,7 +1439,13 @@ def get_status(
     process_results_df = table_dfs["process_results_df"]
     success_process_results_df = table_dfs["success_process_results_df"]
     failed_process_results_df = table_dfs["failed_process_results_df"]
-    # summarize results
+    # query results
+    results = {"query_uuid": query_uuid}
+    no_results_status = "No Records Found"
+    if query_results_df.empty:
+        results["query_submit_status"] = no_results_status
+        results["query_processing_status"] = no_results_status
+        return results
     if len(query_results_df.Status.unique()) == 1:
         query_results_status = str(query_results_df.Status.unique()[0])
     else:
@@ -1427,9 +1453,17 @@ def get_status(
         query_results_status = query_results_status.replace("{", "").replace("}", "")
         query_results_status = query_results_status.replace("'", "")
     query_submit_status = query_results_status
-    query_total_row_count = query_results_df.TotalRowCount.sum()
     number_of_query_splits = query_results_df.shape[0]
     number_of_subqueries = query_results_df.MessagesSentToQueue.sum()
+    query_total_row_count = query_results_df.TotalRowCount.sum()
+    results["query_submit_status"] = query_submit_status
+    results["query_submit_splits"] = number_of_query_splits
+    results["number_of_subqueries"] = int(number_of_subqueries)
+    results["query_total_row_count"] = int(query_total_row_count)
+    # process results
+    if process_results_df.empty:
+        results["query_processing_status"] = no_results_status
+        return results
     number_of_successful_subqueries = success_process_results_df.shape[0]
     number_of_failed_subqueries = failed_process_results_df.shape[0]
     total_success_bytes = success_process_results_df.FileSizeBytes.sum()
@@ -1452,41 +1486,40 @@ def get_status(
         percent_complete,
         time_since_query_seconds,
     )
-    results = {
-        "query_uuid": query_uuid,
-        "query_submit_status": query_submit_status,
-        "query_submit_splits": number_of_query_splits,
-        "query_processing_status": processing_status,
-        "processing_percent_complete": float(percent_complete),
-        "number_of_subqueries": int(number_of_subqueries),
-        "number_of_subqueries_success": number_of_successful_subqueries,
-        "number_of_subqueries_failed": number_of_failed_subqueries,
-        "query_total_row_count": int(query_total_row_count),
-        "output_total_row_count": int(total_success_row_count),
-        "output_file_size": success_total_size,
-        "output_file_units": file_units,
-        "runtime_since_submit_seconds": round(time_since_query_seconds, 1),
-        "processing_estimated_time_remaining_seconds": time_remaining_seconds,
-    }
-    # add failures (optional)
+    results["query_processing_status"] = processing_status
+    results["processing_percent_complete"] = float(percent_complete)
+    results["number_of_subqueries_success"] = number_of_successful_subqueries
+    results["number_of_subqueries_failed"] = number_of_failed_subqueries
+    results["output_total_row_count"] = int(total_success_row_count)
+    results["output_file_size"] = success_total_size
+    results["output_file_units"] = file_units
+    results["runtime_since_submit_seconds"] = round(time_since_query_seconds, 1)
+    results["processing_estimated_time_remaining_seconds"] = time_remaining_seconds
+    # failures
     if return_failures and failed_process_results_df.shape[0] > 0:
         export_cols = [
-            "SubQuery",
             "Table",
             "StartDatetime",
             "EndDatetime",
             "RowCount",
         ]
+        rename_columns = {
+            "Table": "table",
+            "StartDatetime": "start_datetime",
+            "EndDatetime": "end_datetime",
+            "RowCount": "row_count",
+        }
         export_df = failed_process_results_df[export_cols]
-        results["failures"] = export_df.to_dict(orient="records")
+        export_df_renamed = export_df.rename(columns=rename_columns)
+        results["failures"] = export_df_renamed.to_dict(orient="records")
+    else:
+        results["failures"] = [{}]
     return results
 
 
 # -----------------------------------------------------------------------------
-# Pydantic input validation for HTTP requests
+# Pydantic input/output validation for FastAPI HTTP requests
 # -----------------------------------------------------------------------------
-
-# Expected Datetime Format: "YYYY-MM-DD HH:MM:SS.SSSSSS"
 
 
 @dataclass
@@ -1496,13 +1529,27 @@ class RegEx:
     uuid: str = (
         r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     )
+    sub_key: str = r"^[0-9a-fA-F]{32}$"
     datetime: str = r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
     url: str = r"^(http|https)://"
     dcr: str = r"^dcr-"
 
 
-class IngestHttpRequest(BaseModel):
-    """pydantic input validation for Azure Ingest Test Data Function"""
+class APIMExceptionOutput(BaseModel):
+    """output for APIM Exceptions"""
+
+    statusCode: str
+    message: str
+
+
+class HTTPExceptionOutput(BaseModel):
+    """output for HTTP Exceptions"""
+
+    detail: str
+
+
+class IngestInput(BaseModel):
+    """input validation for azure_ingest_data()"""
 
     log_analytics_data_collection_endpoint: str = Field(pattern=RegEx.url, min_length=10)
     log_analytics_data_collection_rule_id: str = Field(pattern=RegEx.dcr, min_length=5)
@@ -1523,8 +1570,24 @@ class IngestHttpRequest(BaseModel):
     max_rows_per_request: int = Field(default=5_000_000, gt=0)
 
 
-class SubmitQueryHttpRequest(BaseModel):
-    """pydantic input validation for Azure Submit Query Function"""
+class IngestOuput(BaseModel):
+    """output validation for azure_ingest_data()"""
+
+    ingest_uuid: str
+    ingest_status: str
+    table_stream_name: str
+    start_datetime: str
+    end_datetime: str
+    number_of_columns: int
+    rows_generated: int
+    rows_ingested: int
+    valid_datetime_range: bool
+    runtime_seconds: float
+    ingest_datetime: str
+
+
+class SubmitQueryInput(BaseModel):
+    """input validation for azure_submit_query()"""
 
     query_uuid: str = Field(default=str(uuid.uuid4()), pattern=RegEx.uuid)
     subscription_id: str = Field(pattern=RegEx.uuid)
@@ -1563,8 +1626,23 @@ class SubmitQueryHttpRequest(BaseModel):
     storage_blob_output_format: str = Field(default="JSONL", min_length=3)
 
 
-class SubmitQueryHttpRequestSplit(SubmitQueryHttpRequest):
-    """pydantic input validation for Azure Submit Query Function"""
+class SubmitQueryOutput(BaseModel):
+    """output validation for azure_submit_query()"""
+
+    query_uuid: str
+    submit_status: str
+    table_names: str
+    start_datetime: str
+    end_datetime: str
+    total_row_count: int
+    subqueries_generated: int
+    subqueries_sent_to_queue: int
+    runtime_seconds: float
+    submit_datetime: str
+
+
+class SubmitQueryParallelInput(SubmitQueryInput):
+    """input validation for azure_submit_queries()"""
 
     parallel_process_break_up_query_freq: str = Field(default="1d", min_length=2)
     storage_queue_query_name: str = Field(
@@ -1572,8 +1650,23 @@ class SubmitQueryHttpRequestSplit(SubmitQueryHttpRequest):
     )
 
 
-class GetQueryStatusHttpRequest(BaseModel):
-    """pydantic input validation for Azure Get Status Function"""
+class SubmitQueryParallelOutput(BaseModel):
+    """output validation for azure_submit_queries()"""
+
+    query_uuid: str
+    split_status: str
+    table_names: str
+    start_datetime: str
+    end_datetime: str
+    number_of_messages_generated: int
+    number_of_messages_sent: int
+    total_row_count: int
+    runtime_seconds: float
+    split_datetime: str
+
+
+class GetQueryStatusInput(BaseModel):
+    """input validation for azure_get_status_post()"""
 
     query_uuid: str = Field(pattern=RegEx.uuid)
     storage_table_url: str = Field(
@@ -1592,25 +1685,108 @@ class GetQueryStatusHttpRequest(BaseModel):
     filesize_units: str = Field(default="GB", min_length=2)
 
 
+class GetQueryStatusOutput(BaseModel):
+    """output validation for azure_get_status() and azure_get_status_post()"""
+
+    query_uuid: str
+    query_partitions: int
+    submit_status: str
+    processing_status: str
+    percent_complete: float
+    runtime_since_submit_seconds: float
+    estimated_time_remaining_seconds: float
+    number_of_subqueries: int
+    number_of_subqueries_success: int
+    number_of_subqueries_failed: int
+    query_row_count: int
+    output_row_count: int
+    output_file_size: float
+    output_file_units: str
+    failures: list[dict]
+
+
+class GetQueryStatusOutputNoQuery(BaseModel):
+    """output validation for azure_get_status() and azure_get_status_post()"""
+
+    query_uuid: str
+    submit_status: str
+    processing_status: str
+
+
+class GetQueryStatusOutputNoProcess(BaseModel):
+    """output validation for azure_get_status() and azure_get_status_post()"""
+
+    query_uuid: str
+    submit_status: str
+    processing_status: str
+    query_partitions: int
+    number_of_subqueries: int
+    query_row_count: int
+
+
 # --------------------------------------------------------------------------------------
-# Azure Functions - HTTP Triggers
+# Azure Functions - FastAPI HTTP Endpoints
 # --------------------------------------------------------------------------------------
 
 
-@app.route(route="azure_ingest_test_data")
-def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
+@fastapi_app.post(
+    path="/azure_ingest_test_data",
+    name="Ingest Test Data",
+    responses={
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
+def azure_ingest_test_data(
+    validated_inputs: Annotated[
+        IngestInput,
+        Body(
+            openapi_examples={
+                "required": {
+                    "summary": "Required Parameters",
+                    "description": "Example using required parameters",
+                    "value": {
+                        "log_analytics_data_collection_endpoint": "https://<DATA_COLLECTION_ENDPOINT>.ingest.monitor.azure.com",
+                        "log_analytics_data_collection_rule_id": "dcr-<RULE_ID>",
+                        "log_analytics_data_collection_stream_name": "Custom-<TABLE_NAME>_CL",
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "timedelta_seconds": 0.000_1,
+                        "number_of_rows": 1_000,
+                    },
+                },
+                "optional": {
+                    "summary": "Optional Parameters",
+                    "description": "Example using optional parameters",
+                    "value": {
+                        "log_analytics_data_collection_endpoint": "https://<DATA_COLLECTION_ENDPOINT>.ingest.monitor.azure.com",
+                        "log_analytics_data_collection_rule_id": "dcr-<RULE_ID>",
+                        "log_analytics_data_collection_stream_name": "Custom-<TABLE_NAME>_CL",
+                        "storage_table_url": "https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/",
+                        "storage_table_ingest_name": "ingestlog",
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "timedelta_seconds": 0.000_1,
+                        "number_of_rows": 1_000,
+                        "number_of_columns": 10,
+                        "max_rows_per_request": 5_000_000,
+                    },
+                },
+            }
+        ),
+    ],
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> IngestOuput:
     """
-    Azure HTTP Triggered Function to ingest test data to log analytics
+    Ingest test data to log analytics
     """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_ingest_test_data function...")
-    # input validation
-    request_body = req.get_json()
-    try:
-        validated_inputs = IngestHttpRequest.model_validate(request_body)
-    except Exception as e:
-        logging.error("Invalid Inputs, Exception: %s", e)
-        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract fields
     endpoint = validated_inputs.log_analytics_data_collection_endpoint
     rule_id = validated_inputs.log_analytics_data_collection_rule_id
@@ -1640,9 +1816,9 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Success: %s", results)
     except Exception as e:
         logging.error("Failed: %s", e)
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
     # response
-    return_resposne = {
+    return_response = {
         "ingest_uuid": results["PartitionKey"],
         "ingest_status": results["Status"],
         "table_stream_name": stream_name,
@@ -1655,27 +1831,94 @@ def azure_ingest_test_data(req: func.HttpRequest) -> func.HttpResponse:
         "runtime_seconds": results["RuntimeSeconds"],
         "ingest_datetime": results["TimeGenerated"],
     }
-    return func.HttpResponse(
-        json.dumps(return_resposne), mimetype="application/json", status_code=200
-    )
+    logging.info(return_response)
+    return return_response
 
 
-@app.route(route="azure_submit_query")
+@fastapi_app.post(
+    path="/azure_submit_query",
+    name="Submit Query",
+    responses={
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
 def azure_submit_query(
-    req: func.HttpRequest,
-) -> func.HttpResponse:
+    validated_inputs: Annotated[
+        SubmitQueryInput,
+        Body(
+            openapi_examples={
+                "required": {
+                    "summary": "Required Parameters",
+                    "description": "Example using required parameters",
+                    "value": {
+                        "subscription_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "resource_group_name": "<RESOURCE_GROUP_NAME>",
+                        "log_analytics_worksapce_name": "<LOG_ANALYTICS_WORKSPACE_NAME>",
+                        "log_analytics_workspace_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "storage_blob_url": "https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/",
+                        "storage_blob_container_name": "<CONTAINER_NAME>",
+                        "table_names_and_columns": {
+                            "<TABLE_NAME>_CL": [
+                                "TimeGenerated",
+                                "<COLUMN_NAME_1>",
+                                "<COLUMN_NAME_2>",
+                                "<COLUMN_NAME_3>",
+                            ]
+                        },
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                    },
+                },
+                "optional": {
+                    "summary": "Optional Parameters",
+                    "description": "Example using optional parameters",
+                    "value": {
+                        "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "subscription_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "resource_group_name": "<RESOURCE_GROUP_NAME>",
+                        "log_analytics_worksapce_name": "<LOG_ANALYTICS_WORKSPACE_NAME>",
+                        "log_analytics_workspace_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "storage_queue_url": "https://<STORAGE_ACCOUNT_NAME>.queue.core.windows.net/",
+                        "storage_queue_process_name": "<STORAGE_QUEUE_PROCESS_NAME>",
+                        "storage_blob_url": "https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/",
+                        "storage_blob_container_name": "<CONTAINER_NAME>",
+                        "storage_table_url": "https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/",
+                        "storage_table_query_name": "querylog",
+                        "storage_table_process_name": "processlog",
+                        "table_names_and_columns": {
+                            "<TABLE_NAME>_CL": [
+                                "TimeGenerated",
+                                "<COLUMN_NAME_1>",
+                                "<COLUMN_NAME_2>",
+                                "<COLUMN_NAME_3>",
+                            ]
+                        },
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "query_row_limit": 250_000,
+                        "query_row_limit_correction": 1000,
+                        "break_up_query_freq": "4h",
+                        "storage_blob_output_format": "JSONL",
+                    },
+                },
+            }
+        ),
+    ],
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> SubmitQueryOutput:
     """
-    Azure HTTP Triggered Function to subit query
+    Submit query to log analytics
     """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_submit_query function...")
-    # input validation
-    request_body = req.get_json()
-    try:
-        validated_inputs = SubmitQueryHttpRequest.model_validate(request_body)
-    except Exception as e:
-        logging.error("Invalid Inputs, Exception: %s", e)
-        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract fields
     query_uuid = validated_inputs.query_uuid
     subscription_id = validated_inputs.subscription_id
@@ -1723,9 +1966,9 @@ def azure_submit_query(
         logging.info("Success: %s", results)
     except Exception as e:
         logging.error("Failed: %s", e)
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
     # response
-    return_resposne = {
+    return_response = {
         "query_uuid": results["PartitionKey"],
         "submit_status": results["Status"],
         "table_names": results["Tables"],
@@ -1737,31 +1980,97 @@ def azure_submit_query(
         "runtime_seconds": results["RuntimeSeconds"],
         "submit_datetime": results["TimeGenerated"],
     }
-    return func.HttpResponse(
-        json.dumps(return_resposne), mimetype="application/json", status_code=200
-    )
+    logging.info(return_response)
+    return return_response
 
 
-@app.route(route="azure_submit_queries")
-def azure_submit_queries(
-    req: func.HttpRequest,
-) -> func.HttpResponse:
+@fastapi_app.post(
+    path="/azure_submit_query_parallel",
+    name="Submit Query",
+    responses={
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
+def azure_submit_query_parallel(
+    validated_inputs: Annotated[
+        SubmitQueryParallelInput,
+        Body(
+            openapi_examples={
+                "required": {
+                    "summary": "Required Parameters",
+                    "description": "Example using required parameters",
+                    "value": {
+                        "subscription_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "resource_group_name": "<RESOURCE_GROUP_NAME>",
+                        "log_analytics_worksapce_name": "<LOG_ANALYTICS_WORKSPACE_NAME>",
+                        "log_analytics_workspace_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "storage_blob_url": "https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/",
+                        "storage_blob_container_name": "<CONTAINER_NAME>",
+                        "table_names_and_columns": {
+                            "<TABLE_NAME>_CL": [
+                                "TimeGenerated",
+                                "<COLUMN_NAME_1>",
+                                "<COLUMN_NAME_2>",
+                                "<COLUMN_NAME_3>",
+                            ]
+                        },
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                    },
+                },
+                "optional": {
+                    "summary": "Optional Parameters",
+                    "description": "Example using optional parameters",
+                    "value": {
+                        "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "subscription_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "resource_group_name": "<RESOURCE_GROUP_NAME>",
+                        "log_analytics_worksapce_name": "<LOG_ANALYTICS_WORKSPACE_NAME>",
+                        "log_analytics_workspace_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "storage_queue_url": "https://<STORAGE_ACCOUNT_NAME>.queue.core.windows.net/",
+                        "storage_queue_query_name": "<STORAGE_QUEUE_QUERY_NAME>",
+                        "storage_queue_process_name": "<STORAGE_QUEUE_PROCESS_NAME>",
+                        "storage_blob_url": "https://<STORAGE_ACCOUNT_NAME>.blob.core.windows.net/",
+                        "storage_blob_container_name": "<CONTAINER_NAME>",
+                        "storage_table_url": "https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/",
+                        "storage_table_query_name": "querylog",
+                        "storage_table_process_name": "processlog",
+                        "table_names_and_columns": {
+                            "<TABLE_NAME>_CL": [
+                                "TimeGenerated",
+                                "<COLUMN_NAME_1>",
+                                "<COLUMN_NAME_2>",
+                                "<COLUMN_NAME_3>",
+                            ]
+                        },
+                        "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
+                        "query_row_limit": 250_000,
+                        "query_row_limit_correction": 1000,
+                        "parallel_process_break_up_query_freq": "1d",
+                        "break_up_query_freq": "4h",
+                        "storage_blob_output_format": "JSONL",
+                    },
+                },
+            }
+        ),
+    ],
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> SubmitQueryParallelOutput:
     """
-    Azure HTTP Triggered Function to subit query
-    Splits datetime range before running submit process
-    Will run across multiple Azure Function instances
-    Use this for 'large' datetime ranges or if exceeding azure function timeout
+    Submits query to log analytics, splits initial datetime range, and runs in parallel
     """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_submit_queries function...")
     start_time = time.time()
-    # input validation
-    request_body = req.get_json()
-    try:
-        validated_inputs = SubmitQueryHttpRequestSplit.model_validate(request_body)
-    except Exception as e:
-        logging.error("Invalid Inputs, Exception: %s", e)
-        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
     # extract values
     query_uuid = validated_inputs.query_uuid
     subscription_id = validated_inputs.subscription_id
@@ -1794,7 +2103,7 @@ def azure_submit_queries(
         log_client = LogsQueryClient(credential)
     except Exception as e:
         logging.error("Failed: %s", e)
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
+        raise HTTPException(status_code=500, detail=f"Failed Connection: {e}") from e
     # split query and send to queue
     try:
         # get total result count
@@ -1879,12 +2188,12 @@ def azure_submit_queries(
             logging.info("No data during %s-%s", start_datetime, end_datetime)
     except Exception as e:
         logging.error("Failed: %s", e)
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
     # response
     table_names_join = ", ".join(table_names_and_columns.keys())
     time_generated = pd.Timestamp.today("UTC").strftime("%Y-%m-%d %H:%M:%S.%f")
     time_calculation = round(time.time() - start_time, 1)
-    return_resposne = {
+    return_response = {
         "query_uuid": query_uuid,
         "split_status": status,
         "table_names": table_names_join,
@@ -1896,26 +2205,170 @@ def azure_submit_queries(
         "runtime_seconds": time_calculation,
         "split_datetime": time_generated,
     }
-    logging.info(return_resposne)
-    return func.HttpResponse(
-        json.dumps(return_resposne), mimetype="application/json", status_code=200
-    )
+    logging.info(return_response)
+    return return_response
 
 
-@app.route(route="azure_get_status")
-def azure_get_status(req: func.HttpRequest) -> func.HttpResponse:
+@fastapi_app.get(
+    path="/azure_get_status",
+    name="Get Query Status",
+    responses={
+        400: {"model": HTTPExceptionOutput, "description": "Input Error"},
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
+def azure_get_status(
+    query_uuid: Annotated[str | None, Query(pattern=RegEx.uuid)] = None,
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> GetQueryStatusOutput | GetQueryStatusOutputNoProcess | GetQueryStatusOutputNoQuery:
     """
-    Azure HTTP Triggered Function to get a query status
+    Get query status
     """
     logging.info("Python HTTP trigger function processed a request")
     logging.info("Running azure_get_status function...")
-    # input validation
-    request_body = req.get_json()
+    # confirm uuid
+    if not query_uuid:
+        logging.error("Failed: no query uuid")
+        raise HTTPException(status_code=400, detail="Failed: no query uuid")
+    # confirm env variables
+    env_vars = {
+        "storage_table_url": env_var_storage_table_url,
+        "storage_table_query_name": env_var_storage_table_query_name,
+        "storage_table_process_name": env_var_storage_table_process_name,
+    }
+    for each_name, each_value in env_vars.items():
+        if not each_value:
+            logging.error("Failed: env variable %s not set", each_name)
+            raise HTTPException(
+                status_code=400, detail=f"Failed: env variable {each_name} not set"
+            )
+    # get status
     try:
-        validated_inputs = GetQueryStatusHttpRequest.model_validate(request_body)
+        results = get_status(
+            credential,
+            query_uuid,
+            env_var_storage_table_url,
+            env_var_storage_table_query_name,
+            env_var_storage_table_process_name,
+        )
+        logging.info("Success: %s", results)
     except Exception as e:
-        logging.error("Invalid Inputs, Exception: %s", e)
-        return func.HttpResponse(f"Invalid Inputs, Exception: {e}", status_code=400)
+        logging.error("Failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
+    # response
+    return_response = {
+        "query_uuid": results["query_uuid"],
+        "submit_status": results["query_submit_status"],
+        "processing_status": results["query_processing_status"],
+    }
+    # no query records
+    if results["query_submit_status"] == "No Records Found":
+        logging.info("Results: %s", return_response)
+        return return_response
+    return_response["query_partitions"] = results["query_submit_splits"]
+    return_response["number_of_subqueries"] = results["number_of_subqueries"]
+    return_response["query_row_count"] = results["query_total_row_count"]
+    # no process records
+    if results["query_processing_status"] == "No Records Found":
+        logging.info("Results: %s", return_response)
+        return return_response
+    return_response["number_of_subqueries_success"] = results[
+        "number_of_subqueries_success"
+    ]
+    return_response["number_of_subqueries_failed"] = results[
+        "number_of_subqueries_failed"
+    ]
+    return_response["output_row_count"] = results["output_total_row_count"]
+    return_response["output_file_size"] = results["output_file_size"]
+    return_response["output_file_units"] = results["output_file_units"]
+    return_response["percent_complete"] = results["processing_percent_complete"]
+    return_response["runtime_since_submit_seconds"] = results[
+        "runtime_since_submit_seconds"
+    ]
+    return_response["estimated_time_remaining_seconds"] = results[
+        "processing_estimated_time_remaining_seconds"
+    ]
+    return_response["failures"] = results["failures"]
+    # re-order json output
+    key_order = [
+        "query_uuid",
+        "query_partitions",
+        "submit_status",
+        "processing_status",
+        "percent_complete",
+        "runtime_since_submit_seconds",
+        "estimated_time_remaining_seconds",
+        "number_of_subqueries",
+        "number_of_subqueries_success",
+        "number_of_subqueries_failed",
+        "query_row_count",
+        "output_row_count",
+        "output_file_size",
+        "output_file_units",
+        "failures",
+    ]
+    return_response_order = {k: return_response[k] for k in key_order}
+    logging.info("Results: %s", return_response_order)
+    return return_response_order
+
+
+@fastapi_app.post(
+    path="/azure_get_status",
+    name="Get Query Status",
+    responses={
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
+def azure_get_status_post(
+    validated_inputs: Annotated[
+        GetQueryStatusInput,
+        Body(
+            openapi_examples={
+                "required": {
+                    "summary": "Required Parameters",
+                    "description": "Example using required parameters",
+                    "value": {
+                        "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                    },
+                },
+                "optional": {
+                    "summary": "Optional Parameters",
+                    "description": "Example using optional parameters",
+                    "value": {
+                        "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "storage_table_url": "https://<STORAGE_ACCOUNT_NAME>.table.core.windows.net/",
+                        "storage_table_query_name": "querylog",
+                        "storage_table_process_name": "processlog",
+                        "return_failures": True,
+                        "filesize_units": "GB",
+                    },
+                },
+            }
+        ),
+    ],
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> GetQueryStatusOutput | GetQueryStatusOutputNoProcess | GetQueryStatusOutputNoQuery:
+    """
+    Get query status
+    """
+    logging.info("Python HTTP trigger function processed a request")
+    logging.info("Running azure_get_status_post function...")
     # extract fields
     query_uuid = validated_inputs.query_uuid
     storage_table_url = validated_inputs.storage_table_url
@@ -1937,31 +2390,62 @@ def azure_get_status(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Success: %s", results)
     except Exception as e:
         logging.error("Failed: %s", e)
-        return func.HttpResponse(f"Failed: {e}", status_code=500)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
     # response
-    return_resposne = {
+    return_response = {
         "query_uuid": results["query_uuid"],
-        "query_partitions": results["query_submit_splits"],
         "submit_status": results["query_submit_status"],
         "processing_status": results["query_processing_status"],
-        "percent_complete": results["processing_percent_complete"],
-        "runtime_since_submit_seconds": results["runtime_since_submit_seconds"],
-        "estimated_time_remaining_seconds": results[
-            "processing_estimated_time_remaining_seconds"
-        ],
-        "number_of_subqueries": results["number_of_subqueries"],
-        "number_of_subqueries_success": results["number_of_subqueries_success"],
-        "number_of_subqueries_failed": results["number_of_subqueries_failed"],
-        "query_row_count": results["query_total_row_count"],
-        "output_row_count": results["output_total_row_count"],
-        "output_file_size": results["output_file_size"],
-        "output_file_units": results["output_file_units"],
     }
-    if results.get("failures"):
-        return_resposne["failures"] = results["failures"]
-    return func.HttpResponse(
-        json.dumps(return_resposne), mimetype="application/json", status_code=200
-    )
+    # no query records
+    if results["query_submit_status"] == "No Records Found":
+        logging.info("Results: %s", return_response)
+        return return_response
+    return_response["query_partitions"] = results["query_submit_splits"]
+    return_response["number_of_subqueries"] = results["number_of_subqueries"]
+    return_response["query_row_count"] = results["query_total_row_count"]
+    # no process records
+    if results["query_processing_status"] == "No Records Found":
+        logging.info("Results: %s", return_response)
+        return return_response
+    return_response["number_of_subqueries_success"] = results[
+        "number_of_subqueries_success"
+    ]
+    return_response["number_of_subqueries_failed"] = results[
+        "number_of_subqueries_failed"
+    ]
+    return_response["output_row_count"] = results["output_total_row_count"]
+    return_response["output_file_size"] = results["output_file_size"]
+    return_response["output_file_units"] = results["output_file_units"]
+    return_response["percent_complete"] = results["processing_percent_complete"]
+    return_response["runtime_since_submit_seconds"] = results[
+        "runtime_since_submit_seconds"
+    ]
+    return_response["estimated_time_remaining_seconds"] = results[
+        "processing_estimated_time_remaining_seconds"
+    ]
+    return_response["failures"] = results["failures"]
+    # re-order json output
+    key_order = [
+        "query_uuid",
+        "query_partitions",
+        "submit_status",
+        "processing_status",
+        "percent_complete",
+        "runtime_since_submit_seconds",
+        "estimated_time_remaining_seconds",
+        "number_of_subqueries",
+        "number_of_subqueries_success",
+        "number_of_subqueries_failed",
+        "query_row_count",
+        "output_row_count",
+        "output_file_size",
+        "output_file_units",
+        "failures",
+    ]
+    return_response_order = {k: return_response[k] for k in key_order}
+    logging.info("Results: %s", return_response_order)
+    return return_response_order
 
 
 # --------------------------------------------------------------------------------------

@@ -5,6 +5,9 @@
         "snapshotPersistenceEnabled": true 
     },
     "extensions": {
+        "http": {
+            "routePrefix": ""
+        },
         "queues": {
             "messageEncoding": "none",
             "maxPollingInterval": "00:02:00",

@@ -9,6 +9,7 @@ azure-monitor-query
 azure-storage-blob
 azure-storage-queue
 azure-data-tables
+fastapi
 pandas
 pyarrow
 pydantic
