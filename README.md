@@ -2,13 +2,13 @@
 
 ## Summary
 
-This Azure Function App using FastAPI enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption (Serverless) hosting plan.
+This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and APIM. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption hosting plan.
 
 This work expands upon: [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466) and [FastAPI on Azure Functions](https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html)
 
 <b>Inputs and Outputs</b>:
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
-- <b>Output</b>: JSON (list format, line delimited), CSV, or PARQUET files
+- <b>Output</b>: JSON (line delimited), CSV, or PARQUET files
 
 <b>Azure HTTP Functions</b>:
 1. <b>azure_ingest_test_data()</b>: creates and ingests test data (optional)
@@ -33,7 +33,7 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 
 ## Setup Notes
 
-<b>Create the Following Azure Resources</b>:
+<b>You will need to have access to or provision the following Azure Resources</b>:
 1. Log Analytics Workspace (data source)
 2. Storage Account
 - Container (data output destination)
@@ -42,14 +42,16 @@ This work expands upon: [How to use logic apps to handle large amounts of data f
 3. Azure Function App (Python 3.11+, consumption or premium plan)
 4. Azure API Management
 
-<b>Authentication Method (Managed Identity or Service Principal) Requirements</b>:
-- Setup via Azure Portal -> Function App -> Identity -> System Assigned -> On -> Azure Role Assignments
+<b>Authentication (Managed Identity or Service Principal) Roles Setup</b>:
+- Azure Portal -> Function App -> Identity -> System Assigned -> On -> Add Azure Role Assignments
 1. <b>Monitoring Metrics Publisher</b>: Ingest to Log Analytics (optional)
 2. <b>Log Analytics Contributor</b>: Query Log Analytics
 3. <b>Storage Queue Data Contributor</b>: Storage Queue Send/Get/Delete
 4. <b>Storage Queue Data Message Processor</b>: Storage Queue Trigger for Azure Function
 5. <b>Storage Blob Data Contributor</b>: Upload to Blob Storage
 6. <b>Storage Table Data Contributor</b>: Logging
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/cb713394-ce13-4724-b567-ab9fe6afe99a)
 
 <b>Environment Variables for Queue Triggers via Managed Identity</b>: 
 - Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
