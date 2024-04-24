@@ -10,7 +10,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
 - <b>Output</b>: JSON (line delimited), CSV, or PARQUET files
 
-<b>Azure HTTP Functions</b>:
+<b>Azure FastAPI HTTP Functions</b>:
 1. <b>azure_ingest_test_data()</b>: creates and ingests test data (optional)
 2. <b>azure_submit_query()</b>: submits single query that is split into smaller queries/jobs and sends to queue
 3. <b>azure_submit_query_parallel()</b>: breaks up initial query and submits multiple queries in parallel
