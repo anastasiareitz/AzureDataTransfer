@@ -287,6 +287,5 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 
 ## References
 
-[How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466)
-[FastAPI on Azure Functions](https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html)
-
+1. [How to use logic apps to handle large amounts of data from log analtyics](https://techcommunity.microsoft.com/t5/azure-integration-services-blog/how-to-use-logic-apps-to-handle-large-amount-of-data-from-log/ba-p/2797466)
+2. [FastAPI on Azure Functions](https://blog.pamelafox.org/2022/11/fastapi-on-azure-functions-with-azure.html)
