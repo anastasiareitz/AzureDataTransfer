@@ -1,6 +1,6 @@
 # Azure Log Analytics Data Export
 
-[Summary](##Summary) | [Files](##Files) | [Setup](##Setup) | [Usage](##Usage) | [Issues](##Issues) | [References](##References)
+[Summary](#Summary) | [Files](#Files) | [Setup](#Setup) | [Usage](#Usage) | [Issues](#Issues) | [References](#References)
 
 ## Summary
 
