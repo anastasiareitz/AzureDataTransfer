@@ -1,5 +1,7 @@
 # Azure Log Analytics Data Export
 
+[Summary](##Summary) | [Files](##Files) | [Setup](##Setup) | [Usage](##Usage) | [Issues](##Issues) | [References](##References)
+
 ## Summary
 
 This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and APIM. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption hosting plan.
@@ -33,7 +35,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - <b>host.json</b>: Azure Function App settings
 - <b>requirements.txt</b>: python package requirements file
 
-## Setup Notes
+## Setup
 
 <b>You will need to have access to or provision the following Azure Resources</b>:
 1. Log Analytics Workspace (data source)
@@ -244,7 +246,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 }
 ```
 
-## Known Issues
+## Issues
 
 1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
    - Manually restart Azure Function App in Azure Portal
