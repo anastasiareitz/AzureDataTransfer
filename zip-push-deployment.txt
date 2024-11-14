@@ -1,0 +1,30 @@
+------------------------------------------
+Function Zip CLI Deployment Instructions: 
+------------------------------------------
+
+1. create function app 
+- premium, python 3.11, code 
+- turn on system-assigned managed identity 
+- add env variables 
+	- storageAccountConnectionString__queueServiceUri -> https://XXXXXXXXXXXXXXXXX.queue.core.windows.net/
+	- storageAccountConnectionString__credential -> managedidentity
+	- QueueQueryName -> queries-queue
+	- QueueProcessName -> processing-queue
+	- QueueURL -> https://XXXXXXXXXXXXXXXXXXX.queue.core.windows.net/
+	- TableURL -> https://XXXXXXXXXXXXXXX.table.core.windows.net/
+	- TableQueryName -> query
+	- TableProcessName -> process
+	- TableIngestName -> ingest
+
+2. create storage account
+- create 1 blob: output
+- create 3 tables: ingest, query, process tables
+- create 4 queues: queries, processing with poison queues 
+- give blob, table, and queue contributor roles to managed identity 
+
+3. log analytics workspace 
+- give law reader or contributor role to managed identity
+
+4. deploy function app
+- open command prompt -> az login
+- az functionapp deployment source config-zip -g rg-XXXXXXXXXXXXXX -n XXXXXXXXXXXXXX --src .\function.zip --build-remote true --verbose

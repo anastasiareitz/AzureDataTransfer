@@ -24,8 +24,8 @@ from fastapi import FastAPI, HTTPException, Body, Header, Query
 from pydantic import BaseModel, Field
 
 # pyarrow required for pandas parquet output, check without importing
-check_packages_installed = ["pyarrow"]
-for each_package in check_packages_installed:
+check_if_packages_installed = ["pyarrow"]
+for each_package in check_if_packages_installed:
     if not importlib.util.find_spec(each_package):
         raise Exception(f"Failed to import package: {each_package}")
 
@@ -40,7 +40,6 @@ fastapi_app = FastAPI(
     title="Azure Log Analytics Data Export API",
     swagger_ui_parameters={"defaultModelsExpandDepth": 0},
 )
-app = func.AsgiFunctionApp(app=fastapi_app, http_auth_level=func.AuthLevel.FUNCTION)
 
 # azure auth via managed identity
 # Azure Portal -> Function App -> Identity -> System Assigned
@@ -60,10 +59,10 @@ credential = DefaultAzureCredential()
 # add 2. storageAccountConnectionString__credential -> managedidentity
 # add 3. QueueQueryName -> <QUEUE_NAME>
 # add 4. QueueProcessName -> <QUEUE_NAME>
-env_var_queue_query_name = os.environ["QueueQueryName"]
-poison_queue_query_name = env_var_queue_query_name + "-poison"
-env_var_queue_process_name = os.environ["QueueProcessName"]
-poison_queue_process_name = env_var_queue_process_name + "-poison"
+env_var_queue_query_name = os.environ.get("QueueQueryName")
+poison_queue_query_name = str(env_var_queue_query_name) + "-poison"
+env_var_queue_process_name = os.environ.get("QueueProcessName")
+poison_queue_process_name = str(env_var_queue_process_name) + "-poison"
 
 # additional env variables to simplify requests (optional)
 env_var_storage_queue_url = os.environ.get("QueueURL")
@@ -999,13 +998,15 @@ def output_filename_and_format(
         output_data = results_df.to_json(
             orient="records", lines=True, date_format="iso", date_unit="ns"
         )
+        return output_filename, output_data
     elif output_format == "CSV":
         output_filename += ".csv"
         output_data = results_df.to_csv(index=False)
+        return output_filename, output_data
     elif output_format == "PARQUET":
         output_filename += ".parquet"
         output_data = results_df.to_parquet(index=False, engine="pyarrow")
-    return output_filename, output_data
+        return output_filename, output_data
 
 
 def process_queue_message(
@@ -2456,8 +2457,10 @@ def azure_get_status_post(
 # add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 # failed messages are sent to <QUEUE_NAME>-poison
 
+bp = func.Blueprint()
 
-@app.queue_trigger(
+
+@bp.queue_trigger(
     arg_name="msg",
     queue_name=env_var_queue_query_name,
     connection="storageAccountConnectionString",
@@ -2536,7 +2539,7 @@ def azure_queue_query(msg: func.QueueMessage) -> None:
         raise Exception(f"Failed to process queue message: {message_content}") from e
 
 
-@app.queue_trigger(
+@bp.queue_trigger(
     arg_name="msg",
     queue_name=env_var_queue_process_name,
     connection="storageAccountConnectionString",
@@ -2566,7 +2569,7 @@ def azure_queue_process(msg: func.QueueMessage) -> None:
         raise Exception(f"Failed to process queue message: {message_content}") from e
 
 
-@app.queue_trigger(
+@bp.queue_trigger(
     arg_name="msg",
     queue_name=poison_queue_query_name,
     connection="storageAccountConnectionString",
@@ -2624,7 +2627,7 @@ def azure_queue_query_poison(msg: func.QueueMessage) -> None:
         raise Exception("Failed, Invalid message") from e
 
 
-@app.queue_trigger(
+@bp.queue_trigger(
     arg_name="msg",
     queue_name=poison_queue_process_name,
     connection="storageAccountConnectionString",
@@ -2681,3 +2684,7 @@ def azure_queue_process_poison(msg: func.QueueMessage) -> None:
         message_body_decoded = msg.get_body().decode("utf-8")
         logging.error("Invalid message: %s", message_body_decoded)
         raise Exception("Failed, Invalid message") from e
+
+
+app = func.AsgiFunctionApp(app=fastapi_app, http_auth_level=func.AuthLevel.FUNCTION)
+app.register_functions(bp)
