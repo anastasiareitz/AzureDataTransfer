@@ -20,7 +20,7 @@ Function Zip CLI Deployment Instructions:
 - create 1 blob: output
 - create 3 tables: ingest, query, process tables
 - create 4 queues: queries, processing with poison queues 
-- give blob, table, and queue contributor roles to managed identity 
+- give blob, table, queue contributor, queue message processor roles to managed identity 
 
 3. log analytics workspace 
 - give law reader or contributor role to managed identity

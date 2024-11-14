@@ -34,22 +34,24 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - <b>function_app.py</b>: Azure Function App python source code
 - <b>host.json</b>: Azure Function App settings
 - <b>requirements.txt</b>: python package requirements file
+- <b>function.app</b>: zip push deployment 
+- <b>zip-push-deployment.txt</b>: instructions on deploying streamlined function without APIM via CLI
 
 ## Setup
 
 <b>You will need to have access to or provision the following Azure Resources</b>:
 1. Log Analytics Workspace (data source)
 2. Storage Account
-- Container (data output destination)
-- Queues (temp storage for split query messages/jobs)
-- Tables (logging)
-3. Azure Function App (Python 3.11+, consumption or premium)
+- 1 Container (data output destination)
+- 4 Queues (temp storage for split query messages/jobs)
+- 3 Tables (logging)
+3. Azure Function App (Python 3.11+, premium)
 - Clone this repo, use VS Code, install Azure Functions tools/extension, deploy to Azure subscription
 - Reference: [Create a function in Azure with Python using Visual Studio Code
 ](https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-vs-code-python?pivots=python-mode-decorators)
-4. Azure API Management (consumption, do not use developer)
+4. Azure API Management (consumption, DO NOT use developer)
 
-<b>Authentication (Managed Identity or Service Principal) Roles Setup</b>:
+<b>Authentication (Managed Identity) Roles Setup</b>:
 - Azure Portal -> Function App -> Identity -> System Assigned -> On -> Add Azure Role Assignments
 1. <b>Monitoring Metrics Publisher</b>: Ingest to Log Analytics (optional)
 2. <b>Log Analytics Contributor</b>: Query Log Analytics
@@ -68,6 +70,16 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 4. <b>QueueProcessName</b> -> <STORAGE_QUEUE_NAME_FOR_PROCESSING>
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/b0c4ce1c-affe-45bd-b9cf-f2db5ef398ae)
+
+<b>Optional Environment Variables (reduces number of params in requests)</b>:
+- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
+1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
+2. <b>TableURL</b> -> <STORAGE_TABLE_URL>
+3. <b>TableIngestName</b> -> <STORAGE_TABLE_INGEST_LOG_NAME>
+4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
+5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
+
+![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/9d2613e3-6d11-4069-88df-2fbef6db74bb)
 
 <b>Azure Storage Setup</b>:
 1. Create 1 container for data output files
@@ -137,16 +149,6 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
 3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
 ](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
-
-<b>Optional Environment Variables (reduces number of params in requests)</b>:
-- Setup via Azure Portal -> Function App -> Settings -> Configuration -> Environment Variables
-1. <b>QueueURL</b> -> <STORAGE_QUEUE_URL>
-2. <b>TableURL</b> -> <STORAGE_TABLE_URL>
-3. <b>TableIngestName</b> -> <STORAGE_TABLE_INGEST_LOG_NAME>
-4. <b>TableQueryName</b> -> <STORAGE_TABLE_QUERY_LOG_NAME>
-5. <b>TableProcessName</b> -> <STORAGE_TABLE_PROCESS_LOG_NAME>
-
-![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/9d2613e3-6d11-4069-88df-2fbef6db74bb)
 
 <b>Optional Security Settings</b>:
 1. Restrict Azure Function App and APIM to specific IP address range(s)
@@ -263,6 +265,10 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
    - Change type from int32 to int64
 
 ## Changelog
+
+2.1.0:
+- Updated azure queue triggers to use blueprints
+- Added Zip Deployment 
 
 2.0.0:
 - Changed Azure Function code to use FastAPI in order to use Swagger UI
