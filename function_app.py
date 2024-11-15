@@ -1590,7 +1590,7 @@ class IngestOuput(BaseModel):
 class SubmitQueryInput(BaseModel):
     """input validation for azure_submit_query()"""
 
-    query_uuid: str = Field(default=str(uuid.uuid4()), pattern=RegEx.uuid)
+    query_uuid: str = Field(default=None, pattern=RegEx.uuid, validate_default=False)
     subscription_id: str = Field(pattern=RegEx.uuid)
     resource_group_name: str = Field(min_length=3)
     log_analytics_worksapce_name: str = Field(min_length=3)
@@ -1922,6 +1922,8 @@ def azure_submit_query(
     logging.info("Running azure_submit_query function...")
     # extract fields
     query_uuid = validated_inputs.query_uuid
+    if not query_uuid:
+        query_uuid = str(uuid.uuid4())
     subscription_id = validated_inputs.subscription_id
     resource_group_name = validated_inputs.resource_group_name
     log_analytics_worksapce_name = validated_inputs.log_analytics_worksapce_name
@@ -2074,6 +2076,8 @@ def azure_submit_query_parallel(
     start_time = time.time()
     # extract values
     query_uuid = validated_inputs.query_uuid
+    if not query_uuid:
+        query_uuid = str(uuid.uuid4())
     subscription_id = validated_inputs.subscription_id
     resource_group_name = validated_inputs.resource_group_name
     workspace_name = validated_inputs.log_analytics_worksapce_name
