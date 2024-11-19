@@ -264,11 +264,16 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 3. Table row count values exceeding 2,147,483,647
    - Change type from int32 to int64
 
+4. Table without TimeGenerated column are not currently supported 
+
+5. Hidden columns are not auto-detected 
+
 ## Changelog
 
 2.1.0:
 - Updated azure queue triggers to use blueprints
 - Added Zip Deployment 
+- Fixed uuid bug, fixed table query bug
 
 2.0.0:
 - Changed Azure Function code to use FastAPI in order to use Swagger UI
