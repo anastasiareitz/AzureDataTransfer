@@ -248,6 +248,16 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 }
 ```
 
+## How To Get All Table Column Names in List:
+
+```kql
+let cols = toscalar(Usage
+| getschema
+| summarize make_list(ColumnName)
+);
+print(cols)
+```
+
 ## Issues
 
 1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
@@ -265,8 +275,10 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
    - Change type from int32 to int64
 
 4. Table without TimeGenerated column are not currently supported 
+   - Function app needs to be updated to use Timestamp or TimeGenerated 
 
 5. Hidden columns are not auto-detected 
+   - Include hidden columns, such as _ItemId explictly 
 
 ## Changelog
 
