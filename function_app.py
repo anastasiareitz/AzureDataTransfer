@@ -383,7 +383,6 @@ def query_log_analytics_get_table_columns(
             each_kql_query = f"""
             let TABLE_NAME = "{each_table}";
             table(TABLE_NAME)
-            | project-away TenantId, Type, _ResourceId
             | take 1
             """
             each_df = query_log_analytics_request(
