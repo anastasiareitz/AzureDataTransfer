@@ -157,6 +157,11 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a0c83909-4136-4f8b-a1c1-498d157cb4ba)
 
+<b>Azure Default Credential Microsoft Entra endpoint</b>
+Set AZURE_AUTHORITY_HOST enviorment variable
+- Public Cloud: https://login.microsoftonline.com (default)
+- US Gov Cloud:  https://login.microsoftonline.us
+
 ## Usage
 
 Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
