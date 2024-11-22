@@ -68,6 +68,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 2. <b>storageAccountConnectionString__credential</b> -> managedidentity
 3. <b>QueueQueryName</b> -> <STORAGE_QUEUE_NAME_FOR_QUERIES>
 4. <b>QueueProcessName</b> -> <STORAGE_QUEUE_NAME_FOR_PROCESSING>
+5. <b>LogAnalyticsEndpoint</b> -> <LAW_ENDPOINT_URL>
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/b0c4ce1c-affe-45bd-b9cf-f2db5ef398ae)
 

@@ -63,6 +63,11 @@ env_var_queue_query_name = os.environ.get("QueueQueryName")
 poison_queue_query_name = str(env_var_queue_query_name) + "-poison"
 env_var_queue_process_name = os.environ.get("QueueProcessName")
 poison_queue_process_name = str(env_var_queue_process_name) + "-poison"
+# support for other law endpoints
+# add 5. log_analytics_endpoint -> https://api.loganalytics.io/v1
+env_var_law_endpoint = os.environ.get("LogAnalyticsEndpoint")
+if not env_var_law_endpoint:
+    env_var_law_endpoint = "https://api.loganalytics.io/v1"
 
 # additional env variables to simplify requests (optional)
 env_var_storage_queue_url = os.environ.get("QueueURL")
@@ -358,7 +363,7 @@ def query_log_analytics_connection_request(
 ) -> pd.DataFrame:
     # log analytics connection
     # note: need to add Log Analytics Contributor and Monitor Publisher role
-    log_client = LogsQueryClient(credential)
+    log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
     # submit query request
     result_df = query_log_analytics_request(workspace_id, log_client, kql_query)
     return result_df
@@ -699,7 +704,7 @@ def query_log_analytics_send_to_queue(
     logging.info("Date Range: %s-%s", start_datetime, end_datetime)
     # log analytics connection
     # note: need to add Log Analytics Contributor role
-    log_client = LogsQueryClient(credential)
+    log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
     # storage queue connection
     # note: need to add Storage Queue Data Contributor role
     storage_queue_url_and_name = storage_queue_url + storage_queue_name
@@ -1116,7 +1121,7 @@ def process_queue_messages_loop(
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
-    log_client = LogsQueryClient(credential)
+    log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
     # storage queue connection
     # note: need to add Storage Queue Data Contributor role
     storage_queue_url_and_name = storage_queue_url + storage_queue_name
@@ -1724,6 +1729,20 @@ class GetQueryStatusOutputNoProcess(BaseModel):
     query_row_count: int
 
 
+class TestLawInput(BaseModel):
+    """input validation for azure_test_law()"""
+
+    workspace_id: str
+    kql_query: str
+
+
+class TestLawOutput(BaseModel):
+    """output validation for azure_test_law()"""
+
+    response: str
+    results: str
+
+
 # --------------------------------------------------------------------------------------
 # Azure Functions - FastAPI HTTP Endpoints
 # --------------------------------------------------------------------------------------
@@ -2104,7 +2123,7 @@ def azure_submit_query_parallel(
         queue_client = QueueClient.from_queue_url(storage_queue_url_and_name, credential)
         # log analytics connection
         # note: need to add Log Analytics Contributor and Monitor Publisher role
-        log_client = LogsQueryClient(credential)
+        log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
     except Exception as e:
         logging.error("Failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed Connection: {e}") from e
@@ -2452,6 +2471,67 @@ def azure_get_status_post(
     return return_response_order
 
 
+@fastapi_app.post(
+    path="/azure_test_law",
+    name="Test Log Analytics Workspace Connection",
+    responses={
+        401: {"model": APIMExceptionOutput, "description": "Access Denied"},
+        500: {"model": HTTPExceptionOutput, "description": "Server Error"},
+    },
+)
+def azure_test_law(
+    validated_inputs: Annotated[
+        TestLawInput,
+        Body(
+            openapi_examples={
+                "required": {
+                    "summary": "Required Parameters",
+                    "description": "Example using required parameters",
+                    "value": {
+                        "workspace_id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                        "endpoint": "https://api.loganalytics.io/v1",
+                        "kql_query": "TableName | take 1",
+                    },
+                },
+            }
+        ),
+    ],
+    # pylint: disable=unused-argument
+    subscription_key: str | None = Header(
+        default=None,
+        title="API Management Subscription Key",
+        alias="Ocp-Apim-Subscription-Key",
+        pattern=RegEx.sub_key,
+    ),
+    # pylint: enable=unused-argument
+) -> TestLawOutput:
+    """
+    Get query status
+    """
+    logging.info("Python HTTP trigger function processed a request")
+    logging.info("Running azure_test_law function...")
+    # extract fields
+    workspace_id = validated_inputs.workspace_id
+    kql_query = validated_inputs.kql_query
+    # connection
+    try:
+        log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
+        response = log_client.query_workspace(
+            workspace_id=workspace_id,
+            query=kql_query,
+            timespan=None,
+            server_timeout=600,
+        )
+        table = response.tables[0]
+        df = pd.DataFrame(data=table.rows, columns=table.columns)
+        logging.info("Success: %s", df)
+        return_response = {"response": "success", "results": f"shape: {str(df.shape)}"}
+        return return_response
+    except Exception as e:
+        logging.error("Failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed: {e}") from e
+
+
 # --------------------------------------------------------------------------------------
 # Azure Functions - Queue Triggers
 # --------------------------------------------------------------------------------------
@@ -2557,7 +2637,7 @@ def azure_queue_process(msg: func.QueueMessage) -> None:
     start_time = time.time()
     # log analytics connection
     # note: need to add Log Analytics Contributor role
-    log_client = LogsQueryClient(credential)
+    log_client = LogsQueryClient(credential, endpoint=env_var_law_endpoint)
     # process message: validate, query log analytics, and send results to storage
     message_content = msg.get_json()
     try:
