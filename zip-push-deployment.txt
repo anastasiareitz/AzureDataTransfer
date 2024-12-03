@@ -15,7 +15,8 @@ Function Zip CLI Deployment Instructions:
 	- TableQueryName -> query
 	- TableProcessName -> process
 	- TableIngestName -> ingest
-	- LogAnalyticsEndpoint -> https://api.loganalytics.XXXX/v1
+	- LogAnalyticsEndpoint -> https://api.loganalytics.XX/v1
+	-  Set AZURE_AUTHORITY_HOST -> https://login.microsoftonline.XX
 
 2. create storage account
 - create 1 blob: output
