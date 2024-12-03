@@ -59,6 +59,7 @@ credential = DefaultAzureCredential()
 # add 2. storageAccountConnectionString__credential -> managedidentity
 # add 3. QueueQueryName -> <QUEUE_NAME>
 # add 4. QueueProcessName -> <QUEUE_NAME>
+# pylint: disable=invalid-name
 env_var_queue_query_name = os.environ.get("QueueQueryName")
 poison_queue_query_name = str(env_var_queue_query_name) + "-poison"
 env_var_queue_process_name = os.environ.get("QueueProcessName")
@@ -68,6 +69,7 @@ poison_queue_process_name = str(env_var_queue_process_name) + "-poison"
 env_var_law_endpoint = os.environ.get("LogAnalyticsEndpoint")
 if not env_var_law_endpoint:
     env_var_law_endpoint = "https://api.loganalytics.io/v1"
+# pylint: enable=invalid-name
 
 # additional env variables to simplify requests (optional)
 env_var_storage_queue_url = os.environ.get("QueueURL")
@@ -382,23 +384,64 @@ def query_log_analytics_get_table_columns(
             if "TimeGenerated" not in each_columns:
                 each_columns_fix = ["TimeGenerated"] + each_columns
             output[each_table] = each_columns_fix
+            # test table and columns
+            try:
+                columns_to_project = ", ".join(each_columns_fix)
+                each_kql_query = f"""
+                let TABLE_NAME = "{each_table}";
+                table(TABLE_NAME)
+                | project {columns_to_project}
+                | take 1
+                """
+                each_df = query_log_analytics_request(
+                    workspace_id, log_client, each_kql_query
+                )
+            except Exception as e:
+                exception_output = f"Invalid Table and/or Column Names: {each_table} - {columns_to_project}"
+                logging.info(exception_output)
+                raise Exception(exception_output) from e
         # if no column names provided, query log analytics for all column names
         else:
             logging.info("Getting columns names for %s", each_table)
-            each_kql_query = f"""
-            let TABLE_NAME = "{each_table}";
-            table(TABLE_NAME)
-            | take 1
-            """
-            each_df = query_log_analytics_request(
-                workspace_id, log_client, each_kql_query
-            )
+            # add hidden column(s)
+            try:
+                each_kql_query = f"""
+                let TABLE_NAME = "{each_table}";
+                table(TABLE_NAME)
+                | extend _ItemId
+                | take 1
+                """
+                each_df = query_log_analytics_request(
+                    workspace_id, log_client, each_kql_query
+                )
+            # don't add hidden column(s)
+            except Exception:
+                each_kql_query = f"""
+                let TABLE_NAME = "{each_table}";
+                table(TABLE_NAME)
+                | take 1
+                """
+                each_df = query_log_analytics_request(
+                    workspace_id, log_client, each_kql_query
+                )
             each_columns_fix = list(each_df.columns)
-            each_columns_fix.remove("TimeGenerated")
-            each_columns_fix = ["TimeGenerated"] + each_columns_fix
-            logging.info("Columns Detected: %s", each_columns_fix)
+            # confirm TimeGenerate exists in table
+            if "TimeGenerated" not in each_columns_fix:
+                exception_output = (
+                    f"TimeGenerated not in table {each_table} - {each_columns_fix}"
+                )
+                logging.info(exception_output)
+                raise Exception(exception_output)
+            # reorder columns, places the following columns at begining of output
+            columns_to_reorder = ["TimeGenerated", "_ItemId"]
+            for each_col in columns_to_reorder[::-1]:
+                if each_col in each_columns_fix:
+                    each_columns_fix.remove(each_col)
+                    each_columns_fix = [each_col] + each_columns_fix
+            logging.info("Columns Detected: %s - %s", each_table, each_columns_fix)
             output[each_table] = each_columns_fix
     if len(output) == 0:
+        logging.info("No valid table names")
         raise Exception("No valid table names")
     return output
 
