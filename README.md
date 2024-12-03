@@ -4,11 +4,11 @@
 
 ## Summary
 
-This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and API Management. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour using a Consumption hosting plan.
+This Azure Function App enables the export of big data (10M+ records per hour) from Azure Log Analytics to Blob Storage via Python SDKs, FastAPI, and API Management. In testing, 50M records with 10 columns were successfully exported in approximately 1 hour.
 
 <b>Inputs and Outputs</b>:
 - <b>Input</b>: log analytics workspace table(s), columns, and date range
-- <b>Output</b>: JSON (line delimited), CSV, or PARQUET files
+- <b>Output</b>: JSON (line delimited) (default), CSV, or PARQUET files
 
 <b>Azure FastAPI HTTP Functions</b>:
 1. <b>azure_ingest_test_data()</b>: creates and ingests test data (optional)
@@ -49,7 +49,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - Clone this repo, use VS Code, install Azure Functions tools/extension, deploy to Azure subscription
 - Reference: [Create a function in Azure with Python using Visual Studio Code
 ](https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-vs-code-python?pivots=python-mode-decorators)
-4. Azure API Management (consumption, DO NOT use developer)
+4. Azure API Management (consumption, DO NOT use developer) (optional)
 
 <b>Authentication (Managed Identity) Roles Setup</b>:
 - Azure Portal -> Function App -> Identity -> System Assigned -> On -> Add Azure Role Assignments
@@ -95,9 +95,9 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
    - <STORAGE_TABLE_QUERY_LOG_NAME>
    - <STORAGE_TABLE_PROCESS_LOG_NAME>
 
-<b>API Management (APIM) Setup:</b>
+<b>API Management (APIM) Setup (Optional):</b>
 - Note: APIM is used to access the FastAPI Swagger/OpenAPI docs
-1. Create APIM Service -> Consumption Pricing Tier (do not select developer) 
+1. Create APIM Service -> Consumption Pricing Tier (DO NOT use developer) 
 2. Add new API -> Function App 
    - Function App: <YOUR_FUNCTION>
    - Display Name: Protected API Calls
@@ -157,7 +157,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 
 ![image](https://github.com/dtagler/azure-log-analytics-data-export/assets/108005114/a0c83909-4136-4f8b-a1c1-498d157cb4ba)
 
-<b>Azure Default Credential Microsoft Entra endpoint</b>
+<b>Azure Default Credential Microsoft Entra Endpoints</b>
 Set AZURE_AUTHORITY_HOST enviorment variable
 - Public Cloud: https://login.microsoftonline.com (default)
 - US Gov Cloud:  https://login.microsoftonline.us
@@ -183,7 +183,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
     "log_analytics_workspace_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "storage_blob_url" : "https://XXXXXXXXXXXXXXXXXXXXX.blob.core.windows.net/",
     "storage_blob_container_name" : "XXXXXXXXXXXXX",
-    "table_names_and_columns" : { "XXXXXXXXXXXXXXX_CL": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
+    "table_names_and_columns" : { "XXXXXXXXXXXXXXX": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
     "start_datetime" : "2024-03-19 00:00:00",
     "end_datetime" : "2024-03-20 00:00:00"
 }
@@ -197,7 +197,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 {
     "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "submit_status": "Success",
-    "table_names": "XXXXXXXXXXX_CL",
+    "table_names": "XXXXXXXXXXX",
     "start_datetime": "2024-03-19 00:00:00.000000",
     "end_datetime": "2024-03-20 00:00:00.000000",
     "total_row_count": 23000000,
@@ -212,7 +212,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 {
     "query_uuid": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "split_status": "Success",
-    "table_names": "XXXXXXXXXXX_CL",
+    "table_names": "XXXXXXXXXXX",
     "start_datetime": "2024-04-04 00:00:00.000000",
     "end_datetime": "2024-04-10 00:00:00.000000",
     "number_of_messages_generated": 6,
@@ -256,8 +256,11 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
 
 ## How To Get All Table Column Names in List:
 
+Note: need to extend or add hidden columns (_ prefix) manually
+
 ```kql
-let cols = toscalar(Usage
+let cols = toscalar(<TABLE_NAME>
+| extend _ItemId
 | getschema
 | summarize make_list(ColumnName)
 );
@@ -268,27 +271,24 @@ print(cols)
 
 1. Azure Function App stops processing sub-queries, queue trigger not processing messages in queue:
    - Manually restart Azure Function App in Azure Portal
-   - Use Premium or Dedicated Plan
+   - Use Premium Plan
 
 2. Submit exceed 10 min Azure Function limit and fails
    - Use azure_submit_query_parallel() function 
    - Reduce the datetime range of the query (recommend less than 100M records)
    - Decrease break_up_query_freq value in azure_submit_query()
    - Decrease parallel_process_break_up_query_freq value in azure_submit_query_parallel()
-   - Use Premium or Dedicated Plan with no time limit
+   - Use Premium Plan with no time limit
   
 3. Table row count values exceeding 2,147,483,647
    - Change type from int32 to int64
 
-4. Table without TimeGenerated column are not currently supported 
-   - TODO: Function app needs to be updated to use Timestamp or other column 
-
-5. Hidden columns are not auto-detected 
+4. Hidden columns are not auto-detected 
    - Add hidden columns manually in list of columns 
 
 ## Changelog
 
-2.1.1:
+2.1.1 (12/3/2024):
 - Added changes for US Gov CLoud
 - Added _ItemId hidden column by default
 - Added error checking for table/column names before processing 
