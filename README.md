@@ -151,7 +151,7 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 - Create new Data Collection Rule (DCR)
 - Create data_sample.json with sample schema of {"TimeGenerated" : "2024-01-01 00:00:00", "DataColumn1" : "string", "DataColumn2" : "string", ... "DataColumn10" : "string"}
 - Azure Portal -> Monitor -> Data Collection Rules -> JSON View -> immutableId, outputStream 
-- For the DCR, assign the Monitoring Metrics Publisher role
+- For the DCE+DCR, assign the Monitoring Metrics Publisher role
 3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
 ](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
 
