@@ -147,7 +147,10 @@ This Azure Function App enables the export of big data (10M+ records per hour) f
 
 <b>Optional Data Collection Endpoint and Rule Setup for Log Analytics Ingest</b>:
 1. Azure Portal -> Monitor -> Data Collection Endpoints -> Create
-2. Azure Portal -> Log Analytics -> Table -> Create New Custom Table
+2. Azure Portal -> Log Analytics -> Tables -> Create New Custom Table
+- Create new Data Collection Rule (DCR)
+- Create data_sample.json with sample schema of {"TimeGenerated" : "2024-01-01 00:00:00", "DataColumn1" : "string", "DataColumn2" : "string", ... "DataColumn10" : "string"}
+- Azure Portal -> Monitor -> Data Collection Rules -> JSON View -> immutableId, outputStream 
 3. Reference: [Tutorial: Send data to Azure Monitor Logs with Logs ingestion API (Azure portal)
 ](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal)
 

@@ -20,12 +20,15 @@
     },
     "functionTimeout": "00:10:00",
     "logging": {
+        "fileLoggingMode": "always",
         "applicationInsights": {
             "samplingSettings": {
-                "isEnabled": true, 
-                "excludedTypes": "Request"
+                "isEnabled": false
             }
         },
-        "logLevel": {"default": "Information"}
+        "logLevel": {
+            "default": "Information",
+            "Function": "Information"
+        }
     }
 }

@@ -191,7 +191,7 @@ def generate_and_ingest_test_data(
         note: 10M rows with 10 columns takes about 15-20 minutes
     Log Analytics Data Collection Endpoint and Rule setup:
         1. azure portal -> monitor -> create data collection endpoint
-        2. azure portal -> log analytics -> table -> create new custom table in log analytics
+        2. azure portal -> log analytics -> tables -> create new custom table in log analytics
         3. create data collection rule and add publisher role permissions
         reference: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/tutorial-logs-ingestion-portal
     Args:
@@ -1799,7 +1799,7 @@ class TestLawOutput(BaseModel):
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_ingest_test_data(
+async def azure_ingest_test_data(
     validated_inputs: Annotated[
         IngestInput,
         Body(
@@ -1905,7 +1905,7 @@ def azure_ingest_test_data(
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_submit_query(
+async def azure_submit_query(
     validated_inputs: Annotated[
         SubmitQueryInput,
         Body(
@@ -2056,7 +2056,7 @@ def azure_submit_query(
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_submit_query_parallel(
+async def azure_submit_query_parallel(
     validated_inputs: Annotated[
         SubmitQueryParallelInput,
         Body(
@@ -2284,7 +2284,7 @@ def azure_submit_query_parallel(
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_get_status(
+async def azure_get_status(
     query_uuid: Annotated[str | None, Query(pattern=RegEx.uuid)] = None,
     # pylint: disable=unused-argument
     subscription_key: str | None = Header(
@@ -2394,7 +2394,7 @@ def azure_get_status(
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_get_status_post(
+async def azure_get_status_post(
     validated_inputs: Annotated[
         GetQueryStatusInput,
         Body(
@@ -2522,7 +2522,7 @@ def azure_get_status_post(
         500: {"model": HTTPExceptionOutput, "description": "Server Error"},
     },
 )
-def azure_test_law(
+async def azure_test_law(
     validated_inputs: Annotated[
         TestLawInput,
         Body(
