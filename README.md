@@ -190,7 +190,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
     "log_analytics_workspace_id" : "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
     "storage_blob_url" : "https://XXXXXXXXXXXXXXXXXXXXX.blob.core.windows.net/",
     "storage_blob_container_name" : "XXXXXXXXXXXXX",
-    "table_names_and_columns" : { "XXXXXXXXXXXXXXX": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9"]},
+    "table_names_and_columns" : { "XXXXXXXXXXXXXXX": ["TimeGenerated","DataColumn1","DataColumn2","DataColumn3","DataColumn4","DataColumn5","DataColumn6","DataColumn7","DataColumn8","DataColumn9", "DataColumn10"]},
     "start_datetime" : "2024-03-19 00:00:00",
     "end_datetime" : "2024-03-20 00:00:00"
 }
@@ -249,7 +249,7 @@ Swagger UI Docs at https://<APIM_ENDPOINT_NAME>.azure-api.net/public/docs
     "submit_status": "Success",
     "processing_status": "Partial",
     "percent_complete": 29.5,
-    "runtime_since_submit_seconds": 463.6
+    "runtime_since_submit_seconds": 463.6,
     "estimated_time_remaining_seconds": 1107.9,
     "number_of_subqueries": 95,
     "number_of_subqueries_success": 28,
@@ -295,12 +295,13 @@ print(cols)
 
 ## Changelog
 
-2.1.2 (12/12/2024):
+2.1.3 (12/13/2024):
 - Added changes for US Gov CLoud
 - Added _ItemId hidden column by default
 - Added error checking for table/column names before processing 
-- fixed logging bug for fastapi endpoints
-- updated documenation for data ingestion setup
+- fixed logging bugs
+- updated documenation for data ingestion
+- lowered defaults (number of rows) to avoid azure errors
 
 2.1.0:
 - Updated azure queue triggers to use blueprints
