@@ -183,7 +183,7 @@ def generate_and_ingest_test_data(
     timedelta_seconds: float,
     number_of_rows: int,
     number_of_columns: int = 10,
-    max_rows_per_request=5_000_000,
+    max_rows_per_request=1_000_000,
 ) -> dict:
     """
     Generates test/fake data and ingests in Log Analytics
@@ -1615,7 +1615,7 @@ class IngestInput(BaseModel):
     timedelta_seconds: float = Field(gt=0.0)
     number_of_rows: int = Field(gt=0)
     number_of_columns: int = Field(default=10, gt=2)
-    max_rows_per_request: int = Field(default=5_000_000, gt=0)
+    max_rows_per_request: int = Field(default=1_000_000, gt=0)
 
 
 class IngestOuput(BaseModel):
