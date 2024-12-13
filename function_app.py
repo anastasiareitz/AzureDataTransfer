@@ -133,7 +133,7 @@ def generate_test_data(
             "TimeGenerated": fake_time_column,
         }
     )
-    for each_index in range(1, number_of_columns):
+    for each_index in range(1, number_of_columns + 1):
         each_column_name = f"DataColumn{each_index}"
         each_column_value = "".join(
             random.choice(string.ascii_lowercase) for i in range(random_length)
