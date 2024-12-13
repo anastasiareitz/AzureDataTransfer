@@ -686,7 +686,7 @@ def query_log_analytics_send_to_queue(
     table_names_and_columns: dict,
     start_datetime: str,
     end_datetime: str,
-    query_row_limit: int = 250_000,
+    query_row_limit: int = 101_000,
     query_row_limit_correction: int = 1_000,
     break_up_query_freq="4h",
     storage_blob_output_format: str = "JSONL",
@@ -1668,7 +1668,7 @@ class SubmitQueryInput(BaseModel):
     table_names_and_columns: dict[str, list[str]] = Field(min_length=1)
     start_datetime: str = Field(pattern=RegEx.datetime)
     end_datetime: str = Field(pattern=RegEx.datetime)
-    query_row_limit: int = Field(default=250_000, gt=0)
+    query_row_limit: int = Field(default=101_000, gt=0)
     query_row_limit_correction: int = Field(default=1_000, ge=0)
     break_up_query_freq: str = Field(default="4h", min_length=2)
     storage_blob_output_format: str = Field(default="JSONL", min_length=3)
@@ -1829,7 +1829,7 @@ async def azure_ingest_test_data(
                         "timedelta_seconds": 0.000_1,
                         "number_of_rows": 1_000,
                         "number_of_columns": 10,
-                        "max_rows_per_request": 5_000_000,
+                        "max_rows_per_request": 1_000_000,
                     },
                 },
             }
@@ -1958,8 +1958,8 @@ async def azure_submit_query(
                         },
                         "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
                         "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
-                        "query_row_limit": 250_000,
-                        "query_row_limit_correction": 1000,
+                        "query_row_limit": 101_000,
+                        "query_row_limit_correction": 1_000,
                         "break_up_query_freq": "4h",
                         "storage_blob_output_format": "JSONL",
                     },
@@ -2110,8 +2110,8 @@ async def azure_submit_query_parallel(
                         },
                         "start_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
                         "end_datetime": "YYYY-MM-DD HH:MM:SS.SSSSSS",
-                        "query_row_limit": 250_000,
-                        "query_row_limit_correction": 1000,
+                        "query_row_limit": 101_000,
+                        "query_row_limit_correction": 1_000,
                         "parallel_process_break_up_query_freq": "1d",
                         "break_up_query_freq": "4h",
                         "storage_blob_output_format": "JSONL",
@@ -2591,7 +2591,7 @@ bp = func.Blueprint()
     queue_name=env_var_queue_query_name,
     connection="storageAccountConnectionString",
 )
-def azure_queue_query(msg: func.QueueMessage) -> None:
+async def azure_queue_query(msg: func.QueueMessage) -> None:
     """
     Azure Function that triggers on messages in Query Queue
     Submits query for processing
@@ -2670,7 +2670,7 @@ def azure_queue_query(msg: func.QueueMessage) -> None:
     queue_name=env_var_queue_process_name,
     connection="storageAccountConnectionString",
 )
-def azure_queue_process(msg: func.QueueMessage) -> None:
+async def azure_queue_process(msg: func.QueueMessage) -> None:
     """
     Azure Function that triggers on messages in Process Queue
     Processes query and exports to stroage account
@@ -2700,7 +2700,7 @@ def azure_queue_process(msg: func.QueueMessage) -> None:
     queue_name=poison_queue_query_name,
     connection="storageAccountConnectionString",
 )
-def azure_queue_query_poison(msg: func.QueueMessage) -> None:
+async def azure_queue_query_poison(msg: func.QueueMessage) -> None:
     """
     Azure Function that triggers on poisoned messages in Query Queue
     Sends failure information to storage table log
@@ -2758,7 +2758,7 @@ def azure_queue_query_poison(msg: func.QueueMessage) -> None:
     queue_name=poison_queue_process_name,
     connection="storageAccountConnectionString",
 )
-def azure_queue_process_poison(msg: func.QueueMessage) -> None:
+async def azure_queue_process_poison(msg: func.QueueMessage) -> None:
     """
     Azure Function that triggers on poisoned messages in Process Queue
     Sends failure information to storage table log
