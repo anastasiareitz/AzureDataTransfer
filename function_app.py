@@ -2583,10 +2583,10 @@ async def azure_test_law(
 # add "extensions": {"queues": {"messageEncoding": "none"}} to host.json
 # failed messages are sent to <QUEUE_NAME>-poison
 
-bp = func.Blueprint()
+bp_azure_functions = func.Blueprint()
 
 
-@bp.queue_trigger(
+@bp_azure_functions.queue_trigger(
     arg_name="msg",
     queue_name=env_var_queue_query_name,
     connection="storageAccountConnectionString",
@@ -2665,7 +2665,7 @@ async def azure_queue_query(msg: func.QueueMessage) -> None:
         raise Exception(f"Failed to process queue message: {message_content}") from e
 
 
-@bp.queue_trigger(
+@bp_azure_functions.queue_trigger(
     arg_name="msg",
     queue_name=env_var_queue_process_name,
     connection="storageAccountConnectionString",
@@ -2695,7 +2695,7 @@ async def azure_queue_process(msg: func.QueueMessage) -> None:
         raise Exception(f"Failed to process queue message: {message_content}") from e
 
 
-@bp.queue_trigger(
+@bp_azure_functions.queue_trigger(
     arg_name="msg",
     queue_name=poison_queue_query_name,
     connection="storageAccountConnectionString",
@@ -2753,7 +2753,7 @@ async def azure_queue_query_poison(msg: func.QueueMessage) -> None:
         raise Exception("Failed, Invalid message") from e
 
 
-@bp.queue_trigger(
+@bp_azure_functions.queue_trigger(
     arg_name="msg",
     queue_name=poison_queue_process_name,
     connection="storageAccountConnectionString",
@@ -2812,5 +2812,9 @@ async def azure_queue_process_poison(msg: func.QueueMessage) -> None:
         raise Exception("Failed, Invalid message") from e
 
 
-app = func.AsgiFunctionApp(app=fastapi_app, http_auth_level=func.AuthLevel.FUNCTION)
-app.register_functions(bp)
+app = func.AsgiFunctionApp(
+    app=fastapi_app,
+    http_auth_level=func.AuthLevel.FUNCTION,
+    function_name="fastapi_user_endpoints",
+)
+app.register_functions(bp_azure_functions)

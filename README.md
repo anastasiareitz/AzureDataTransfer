@@ -282,10 +282,10 @@ print(cols)
 
 2. Submit exceed 10 min Azure Function limit and fails
    - Use azure_submit_query_parallel() function 
-   - Reduce the datetime range of the query (recommend less than 100M records)
+   - Reduce the datetime range of the query (recommend less than 100M records per request)
    - Decrease break_up_query_freq value in azure_submit_query()
    - Decrease parallel_process_break_up_query_freq value in azure_submit_query_parallel()
-   - Use Premium Plan with no time limit
+   - Use Premium Plan with no time limit, change in hosts.json
   
 3. Table row count values exceeding 2,147,483,647
    - Change type from int32 to int64
