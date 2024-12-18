@@ -1018,8 +1018,17 @@ def generate_output_filename_base(
     # extract datetime values for filename
     extract_year = output_filename_timestamp.strftime("%Y")
     extract_month = output_filename_timestamp.strftime("%m")
+    if len(extract_month) == 1:
+        extract_month = f"0{extract_month}"
     extract_day = output_filename_timestamp.strftime("%d")
+    if len(extract_day) == 1:
+        extract_day = f"0{extract_day}"
     extract_hour = output_filename_timestamp.strftime("%H")
+    if len(extract_hour) == 1:
+        extract_hour = f"0{extract_hour}"
+    extract_min = output_filename_timestamp.strftime("%M")
+    if len(extract_min) == 1:
+        extract_min = f"0{extract_min}"
     # mimics continuous export from log analytics
     # https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-data-export
     output_filename = f"{table_name}/"
@@ -1029,7 +1038,7 @@ def generate_output_filename_base(
     output_filename += "providers/microsoft.operationalinsights/"
     output_filename += f"workspaces/{log_analytics_name}/"
     output_filename += f"y={extract_year}/m={extract_month}/d={extract_day}/"
-    output_filename += f"h={extract_hour}/"
+    output_filename += f"h={extract_hour}/m={extract_min}/"
     output_filename += f"{datetime_to_filename_safe(start_datetime)}-"
     output_filename += f"{datetime_to_filename_safe(end_datetime)}"
     return output_filename
