@@ -992,6 +992,7 @@ def query_log_analytics_get_query_results(
     | where (TimeGenerated >= START_DATETIME) and (TimeGenerated < END_DATETIME)
     """
     df = query_log_analytics_request(workspace_id, log_client, kql_query)
+    df = df.sort_values(by="TimeGenerated").reset_index(drop=True)
     return df
 
 
@@ -1039,7 +1040,7 @@ def generate_output_filename_base(
     output_filename += f"workspaces/{log_analytics_name}/"
     output_filename += f"y={extract_year}/m={extract_month}/d={extract_day}/"
     output_filename += f"h={extract_hour}/m={extract_min}/"
-    output_filename += f"{datetime_to_filename_safe(start_datetime)}-"
+    output_filename += f"PT05M_{datetime_to_filename_safe(start_datetime)}-"
     output_filename += f"{datetime_to_filename_safe(end_datetime)}"
     return output_filename
 
@@ -1085,7 +1086,8 @@ def process_queue_message(
     query_results_df = query_log_analytics_get_query_results(log_client, message)
     logging.info("Successfully Downloaded from Log Analytics: %s", query_results_df.shape)
     # confirm count matches
-    if query_results_df.shape[0] != message["Count"]:
+    row_count = message["Count"]
+    if query_results_df.shape[0] != row_count:
         logging.error("Row count doesn't match expected value, %s", message)
         raise Exception(f"Row count doesn't match expected value, {message}")
     # storage blob connection
@@ -1102,20 +1104,57 @@ def process_queue_message(
     table_client = TableClient(
         storage_table_url, storage_table_name, credential=credential
     )
+    # break up reuslts in 5min itervals to mimic continuous export from log analytics
+    # https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-data-export
+    custom_origin = (
+        query_results_df["TimeGenerated"]
+        .iloc[0]
+        .replace(minute=0, second=0, microsecond=0)
+    )
+    grouper = pd.Grouper(
+        key="TimeGenerated",
+        freq="5min",
+        closed="left",
+        label="left",
+        origin=custom_origin,
+    )
     # output filename and file format
     output_format = message["OutputFormat"]
-    output_filename_timestamp = query_results_df["TimeGenerated"].iloc[0]
-    output_filename_base = generate_output_filename_base(
-        message, output_filename_timestamp
-    )
-    full_output_filename, output_data = output_filename_and_format(
-        query_results_df, output_format, output_filename_base
-    )
-    # upload to blob storage
-    file_size = upload_file_to_storage(
-        container_client, full_output_filename, output_data
-    )
-    status = "Success"
+    output_filenames = []
+    total_row_count = 0
+    total_file_size = 0
+    for (
+        each_output_filename_timestamp,
+        each_query_results_df_group,
+    ) in query_results_df.groupby(by=grouper, sort=False):
+        if each_query_results_df_group.shape[0] > 0:
+            # output filename and file format
+            output_filename_base = generate_output_filename_base(
+                message, each_output_filename_timestamp
+            )
+            full_output_filename, output_data = output_filename_and_format(
+                each_query_results_df_group, output_format, output_filename_base
+            )
+            # upload to blob storage
+            try:
+                each_file_size = upload_file_to_storage(
+                    container_client, full_output_filename, output_data
+                )
+            except Exception as e:
+                logging.error(
+                    "Unable to upload split file, %s, %s", full_output_filename, e
+                )
+                raise Exception(
+                    f"Unable to upload split file, {full_output_filename}"
+                ) from e
+            output_filename_split = full_output_filename.split("/")[-1]
+            output_filenames.append(output_filename_split)
+            total_file_size = total_file_size + each_file_size
+            total_row_count = total_row_count + each_query_results_df_group.shape[0]
+    # confirm count matches
+    if total_row_count != row_count:
+        logging.error("Row count after split doesn't match expected value, %s", message)
+        raise Exception(f"Row count after split doesn't match expected value, {message}")
     # logging success to storage table
     query_uuid = message["QueryUUID"]
     table_name = message["Table"]
@@ -1123,11 +1162,12 @@ def process_queue_message(
     start_datetime = start_datetime.replace("T", " ").replace("Z", "")
     end_datetime = message["EndDatetime"]
     end_datetime = end_datetime.replace("T", " ").replace("Z", "")
-    row_count = message["Count"]
+    output_filenames = ", ".join(output_filenames)
     # generate unique row key
+    status = "Success"
     row_key = f"{query_uuid}__{status}__{table_name}__"
     row_key += f"{start_datetime}__{end_datetime}__{row_count}__"
-    row_key += f"{full_output_filename}__{file_size}"
+    row_key += f"{output_filenames}__{total_file_size}"
     unique_row_sha256_hash = hashlib.sha256(row_key.encode()).hexdigest()
     # response and logging to storage table
     runtime_seconds = round(time.time() - start_time, 1)
@@ -1140,8 +1180,8 @@ def process_queue_message(
         "StartDatetime": start_datetime,
         "EndDatetime": end_datetime,
         "RowCount": row_count,
-        "Filename": full_output_filename,
-        "FileSizeBytes": file_size,
+        "Filenames": output_filenames,
+        "FileSizeBytes": total_file_size,
         "RuntimeSeconds": runtime_seconds,
         "TimeGenerated": time_generated,
     }
