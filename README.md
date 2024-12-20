@@ -295,6 +295,9 @@ print(cols)
 
 ## Changelog
 
+2.2.0 (12/20/2024):
+- Changed output file format to better mimic countinous export
+
 2.1.3 (12/13/2024):
 - Added changes for US Gov CLoud
 - Added _ItemId hidden column by default
